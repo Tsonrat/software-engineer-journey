@@ -1,0 +1,194 @@
+# 0001. Two Sum
+
+## Problem
+
+### Description
+
+Given an array of integers `nums` and an integer `target`, return the indices of the two numbers such that they add up to the target.
+
+You may assume that each input has exactly one solution, and you may not use the same element twice.
+
+You can return the answer in any order.
+
+### Example
+
+#### Example 1
+
+```text
+Input: nums = [2,7,11,15], target = 9
+
+Output: [0,1]
+
+Explanation:
+nums[0] + nums[1] == 9
+```
+
+#### Example 2
+
+```text
+Input: nums = [3,2,4], target = 6
+
+Output: [1,2]
+```
+
+#### Example 3
+
+```text
+Input: nums = [3,3], target = 6
+
+Output: [0,1]
+```
+
+---
+
+## My Solution
+
+### 1. Brute Force
+
+```java
+class Solution {
+    public int[] twoSum(int[] nums, int target) {
+
+        for (int i = 0; i < nums.length; i++) {
+
+            for (int j = i + 1; j < nums.length; j++) {
+
+                if (nums[i] + nums[j] == target) {
+                    return new int[]{i, j};
+                }
+
+            }
+        }
+
+        return new int[]{};
+    }
+}
+```
+
+### 2. HashMap
+
+```java
+class Solution {
+    public int[] twoSum(int[] nums, int target) {
+
+        Map<Integer, Integer> map = new HashMap<>();
+
+        for (int i = 0; i < nums.length; i++) {
+
+            int answer = target - nums[i];
+
+            if (map.containsKey(answer)) {
+                return new int[]{map.get(answer), i};
+            }
+
+            map.put(nums[i], i);
+        }
+
+        return new int[]{};
+    }
+}
+```
+
+---
+
+## Note
+
+### Brute Force
+
+- 使用兩層 `for` 迴圈找出所有可能的組合。
+- 時間複雜度為 **O(n²)**。
+- 優點是容易理解，缺點是效率較差。
+
+---
+
+### HashMap
+
+建立一個 `HashMap`，將已經遍歷過的數字存起來。
+
+```java
+Map<Integer, Integer> map = new HashMap<>();
+```
+
+- Key：目前的數字 (`nums[i]`)
+- Value：目前數字的 Index
+
+每次先計算：
+
+```java
+target - nums[i]
+```
+
+再利用
+
+```java
+map.containsKey(answer)
+```
+
+確認需要的數字是否已經出現過。
+
+如果存在，就直接回傳答案。
+
+最後再把目前的數字放入 HashMap。
+
+```java
+map.put(nums[i], i);
+```
+
+---
+
+### ArrayList vs HashMap
+
+**ArrayList**
+
+- 使用 **Index** 存取資料。
+- 結構：`Index -> Value`
+
+例如：
+
+```java
+list.get(0);
+```
+
+---
+
+**HashMap**
+
+- 使用 **Key** 存取資料。
+- 結構：`Key -> Value`
+
+例如：
+
+```java
+map.put(2, 0);
+
+Key = 2
+Value = 0
+```
+
+---
+
+### HashMap 常用方法
+
+```java
+map.containsKey(key);
+```
+
+判斷指定的 Key 是否存在。
+
+---
+
+```java
+map.get(key);
+```
+
+取得指定 Key 對應的 Value。
+
+---
+
+```java
+map.put(key, value);
+```
+
+新增資料，如果 Key 已存在則更新 Value。
+
+---
