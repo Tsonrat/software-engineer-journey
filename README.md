@@ -22,9 +22,6 @@ LeetCode/
 Spring/
 Docker/
 Kubernetes/
-English/
-Japanese/
-Weekly/
 ```
 
 ## Philosophy
