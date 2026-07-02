@@ -12,8 +12,6 @@ Welcome to my learning journey.
 * 💻 **Improve Problem-Solving with LeetCode**｜透過 LeetCode 提升演算法與解題能力
 * 🌱 **Learn Backend Development**｜深入學習後端開發（Spring Boot、API、Database）
 * ☸️ **Deepen Kubernetes & Docker Knowledge**｜持續精進 Kubernetes、Docker 與雲端部署能力
-* 🇺🇸 **Improve English Communication**｜提升英文閱讀、寫作與口說能力
-* 🇯🇵 **Learn Japanese**｜培養日文能力，為日本專案與跨國合作做準備
 * 📈 **Build Long-Term Learning Habits**｜建立長期且持續的學習習慣
 
 ---
