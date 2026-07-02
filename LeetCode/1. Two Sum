@@ -1,194 +1,157 @@
 # 0001. Two Sum
 
-## Problem
+> Difficulty: Easy
+>
+> Tags: Array, HashMap
 
-### Description
+---
 
-Given an array of integers `nums` and an integer `target`, return the indices of the two numbers such that they add up to the target.
+# 📝 Problem
 
-You may assume that each input has exactly one solution, and you may not use the same element twice.
+## Description
 
-You can return the answer in any order.
+Given an array of integers `nums` and an integer `target`,
+return the indices of the two numbers such that they add up to the target.
 
-### Example
+You may assume that each input has exactly one solution.
 
-#### Example 1
+---
+
+## Example
+
+### Example 1
+
+**Input**
 
 ```text
-Input: nums = [2,7,11,15], target = 9
+nums = [2,7,11,15]
+target = 9
+```
 
-Output: [0,1]
+**Output**
 
-Explanation:
+```text
+[0,1]
+```
+
+**Explanation**
+
+```text
 nums[0] + nums[1] == 9
 ```
 
-#### Example 2
+---
+
+### Example 2
+
+**Input**
 
 ```text
-Input: nums = [3,2,4], target = 6
-
-Output: [1,2]
+nums = [3,2,4]
+target = 6
 ```
 
-#### Example 3
+**Output**
 
 ```text
-Input: nums = [3,3], target = 6
-
-Output: [0,1]
+[1,2]
 ```
 
 ---
 
-## My Solution
+# 💻 My Solution
 
-### 1. Brute Force
-
-```java
-class Solution {
-    public int[] twoSum(int[] nums, int target) {
-
-        for (int i = 0; i < nums.length; i++) {
-
-            for (int j = i + 1; j < nums.length; j++) {
-
-                if (nums[i] + nums[j] == target) {
-                    return new int[]{i, j};
-                }
-
-            }
-        }
-
-        return new int[]{};
-    }
-}
-```
-
-### 2. HashMap
+## Solution 1 - Brute Force
 
 ```java
-class Solution {
-    public int[] twoSum(int[] nums, int target) {
-
-        Map<Integer, Integer> map = new HashMap<>();
-
-        for (int i = 0; i < nums.length; i++) {
-
-            int answer = target - nums[i];
-
-            if (map.containsKey(answer)) {
-                return new int[]{map.get(answer), i};
-            }
-
-            map.put(nums[i], i);
-        }
-
-        return new int[]{};
-    }
-}
+// code
 ```
+
+### Idea
+
+- 使用兩層 for 搜尋所有組合。
+- 容易理解。
+- 效率較差。
 
 ---
 
-## Note
-
-### Brute Force
-
-- 使用兩層 `for` 迴圈找出所有可能的組合。
-- 時間複雜度為 **O(n²)**。
-- 優點是容易理解，缺點是效率較差。
-
----
-
-### HashMap
-
-建立一個 `HashMap`，將已經遍歷過的數字存起來。
+## Solution 2 - HashMap
 
 ```java
-Map<Integer, Integer> map = new HashMap<>();
+// code
 ```
 
-- Key：目前的數字 (`nums[i]`)
-- Value：目前數字的 Index
+### Idea
 
-每次先計算：
+- 利用 HashMap 儲存已經遍歷過的數字。
+- 每次只需要找
 
 ```java
 target - nums[i]
 ```
 
-再利用
-
-```java
-map.containsKey(answer)
-```
-
-確認需要的數字是否已經出現過。
-
-如果存在，就直接回傳答案。
-
-最後再把目前的數字放入 HashMap。
-
-```java
-map.put(nums[i], i);
-```
+即可知道答案是否存在。
 
 ---
 
-### ArrayList vs HashMap
+# 📖 Note
 
-**ArrayList**
+## HashMap
 
-- 使用 **Index** 存取資料。
-- 結構：`Index -> Value`
-
-例如：
+建立 HashMap：
 
 ```java
-list.get(0);
+Map<Integer, Integer> map = new HashMap<>();
 ```
+
+| Key | Value |
+|------|-------|
+| nums[i] | index |
+
+常用方法：
+
+```java
+map.containsKey(key)
+```
+
+判斷 Key 是否存在。
+
+```java
+map.get(key)
+```
+
+取得 Value。
+
+```java
+map.put(key, value)
+```
+
+新增或更新資料。
 
 ---
 
-**HashMap**
+## ArrayList vs HashMap
 
-- 使用 **Key** 存取資料。
-- 結構：`Key -> Value`
-
-例如：
-
-```java
-map.put(2, 0);
-
-Key = 2
-Value = 0
-```
+| ArrayList | HashMap |
+|-----------|----------|
+| Index → Value | Key → Value |
+| list.get(index) | map.get(key) |
 
 ---
 
-### HashMap 常用方法
+# 📊 Complexity
 
-```java
-map.containsKey(key);
-```
-
-判斷指定的 Key 是否存在。
-
----
-
-```java
-map.get(key);
-```
-
-取得指定 Key 對應的 Value。
+| Solution | Time | Space |
+|----------|------|-------|
+| Brute Force | O(n²) | O(1) |
+| HashMap | O(n) | O(n) |
 
 ---
 
-```java
-map.put(key, value);
-```
+# ✨ What I Learned
 
-新增資料，如果 Key 已存在則更新 Value。
-
----
+- HashMap 適合快速查詢。
+- containsKey() 用來判斷 Key 是否存在。
+- get() 取得 Value。
+- put() 新增或更新資料。
+- HashMap 可以將 Two Sum 從 O(n²) 優化到 O(n)。
