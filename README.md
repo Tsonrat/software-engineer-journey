@@ -1,35 +1,30 @@
-# Software Engineer Journey
+# 🚀 Software Engineer Journey｜軟體工程師成長紀錄
 
 Welcome to my learning journey.
 
-This repository records my progress toward becoming a better software engineer.
+歡迎來到我的學習旅程，這個 Repository 用來記錄我成為更優秀 Software Engineer 的過程，以及每天持續累積的學習成果。
 
-## Current Goals
+---
 
-- Master Java fundamentals
-- Improve problem-solving with LeetCode
-- Learn backend development
-- Deepen Kubernetes and Docker knowledge
-- Improve English communication
-- Learn Japanese
-- Build long-term learning habits
+## 🎯 Current Goals｜目前目標
 
-## Repository Structure
+* ☕ **Master Java Fundamentals**｜扎實建立 Java 基礎
+* 💻 **Improve Problem-Solving with LeetCode**｜透過 LeetCode 提升演算法與解題能力
+* 🌱 **Learn Backend Development**｜深入學習後端開發（Spring Boot、API、Database）
+* ☸️ **Deepen Kubernetes & Docker Knowledge**｜持續精進 Kubernetes、Docker 與雲端部署能力
+* 🇺🇸 **Improve English Communication**｜提升英文閱讀、寫作與口說能力
+* 🇯🇵 **Learn Japanese**｜培養日文能力，為日本專案與跨國合作做準備
+* 📈 **Build Long-Term Learning Habits**｜建立長期且持續的學習習慣
+
+---
+
+## 📂 Repository Structure｜專案結構
 
 ```text
-Java/
-LeetCode/
-Spring/
-Docker/
-Kubernetes/
+Java/           Java 基礎與語法
+LeetCode/       LeetCode 題解與學習筆記
+Spring/         Spring Boot 練習與專案
+Docker/         Docker 學習與實作
+Kubernetes/     Kubernetes 與雲端部署
 ```
 
-## Philosophy
-
-Learn continuously.
-
-Understand, not memorize.
-
-Build, not just watch.
-
-Reflect, then improve.
