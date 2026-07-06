@@ -1,4 +1,3 @@
-#  Software Engineer Journey｜軟體工程師成長紀錄
 
 Welcome to my learning journey.
 
@@ -8,10 +7,10 @@ Welcome to my learning journey.
 
 ---
 
-## 📂 Repository Structure｜專案結構
+## Repository Structure｜資料結構
 
 ```text
-LeetCode/       LeetCode 題解與學習筆記
-Project/        目前實作專案
+LeetCode/       LeetCode 題解和筆記
+Project/        目前實作專案紀錄
 ```
 
