@@ -1,11 +1,11 @@
-# 🖥️ Frontend
+#  Frontend
 
 > **React + TypeScript + Vite frontend for the Enterprise Kubernetes CI/CD Platform.**
 > **Enterprise Kubernetes CI/CD Platform 的 React 前端實作。**
 
 ---
 
-# 📖 Overview｜概述
+#  Overview｜概述
 
 This frontend is built with **React**, **TypeScript**, and **Vite**, following a layered architecture that separates Pages, Domain Components, API, Authentication, Layout, Types, and Utilities.
 
@@ -17,7 +17,7 @@ Instead of organizing code only by UI components, the project is structured arou
 
 ---
 
-# 🛠 Tech Stack｜使用技術
+#  Tech Stack｜使用技術
 
 * React
 * TypeScript
@@ -28,7 +28,7 @@ Instead of organizing code only by UI components, the project is structured arou
 
 ---
 
-# 📂 Project Structure｜專案結構
+#  Project Structure｜專案結構
 
 ```text
 src/
@@ -44,7 +44,7 @@ src/
 
 ---
 
-# 📦 Folder Responsibilities｜資料夾職責
+#  Folder Responsibilities｜資料夾職責
 
 | Folder        | Responsibility                     |
 | ------------- | ---------------------------------- |
@@ -59,7 +59,7 @@ src/
 
 ---
 
-# 🧩 Domain Modules｜主要功能模組
+#  Domain Modules｜主要功能模組
 
 目前前端主要包含以下功能模組：
 
