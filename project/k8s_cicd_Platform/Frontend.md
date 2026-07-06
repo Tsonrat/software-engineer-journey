@@ -511,27 +511,136 @@ server: {
 
 ---
 
-# Engineering Challenges｜工程挑戰
+# Engineering Challenges｜工程挑戰與解決方式
 
-在專案開發過程中，我遇到許多具有挑戰性的問題，例如：
+## Authentication 與 Token Lifecycle
 
-* Keycloak Authentication Flow 與 Token Lifecycle 管理
-* Role-based Route Protection
-* 前後端 DTO 持續演進與 TypeScript 型別同步
-* JSON、Text、Blob 與 Pagination 等不同 API Response
-* DEV、UAT、PROD 多環境設定的資料隔離
-* Project File 的 `ALL` 可用範圍與實際部署環境差異
-* ENV 與 MOUNT 設定統一至 `configFiles`
-* Helm、Dockerfile 與 Shell Template 的不同設定需求
-* Public Template 與 Custom Template 的切換
-* Deployment Preview 整合多種 Template
-* Docker Base Image 與 Version 相依選擇
-* ConfigMap 與 Secret 命名衝突檢查
-* 非同步 Push Task 的狀態式操作流程
-* Task List 與 Detail Modal 的資料同步
-* 大型 Component 的狀態管理與持續重構
-* Common Component 與 Domain Component 的責任邊界
-* API Layer 與 UI Component 的責任分工
+**Challenge**
 
-這些問題促使我持續調整資料結構、Component 邊界與使用者操作流程，也讓我逐步建立企業級前端開發的工程思維。
+需要處理 Keycloak 登入、Callback、Token 過期、權限驗證與未授權回應。
+
+**Solution**
+
+* 使用 OAuth 2.0 Authorization Code Flow with PKCE
+* 驗證 Callback State，避免不合法回傳
+* 解析 JWT，建立統一的使用者與角色資料
+* 透過 Axios Interceptor 自動加入 Bearer Token
+* Token 即將過期時使用 Refresh Token 更新
+* 收到 `401 Unauthorized` 時清除 Session
+* 使用 `RequireAuth` 與 `RequireRole` 保護 Route
+* 避免 React Effect 重複交換 Authorization Code
+
+---
+
+## 前後端 DTO 與 API Response
+
+**Challenge**
+
+前後端 DTO 持續演進，而且 API Response 同時包含 JSON、Text、Blob 與 Pagination 等不同格式。
+
+**Solution**
+
+* 為 Request、Response 與 Domain Model 建立 TypeScript 型別
+* API Function 保留 `AxiosResponse`
+* Preview API 使用 Text Response
+* 檔案下載使用 Blob Response
+* 列表統一處理 Page、Size、Content 與 Total Elements
+* API 依 Registry、Artifact、Template、Project 等 Domain 拆分
+* 由 Component 管理 Loading、Error 與操作結果
+
+---
+
+## 多環境設定與資料隔離
+
+**Challenge**
+
+DEV、UAT、PROD 具有不同 Template、Values 與 Project File 設定，切換或儲存時不能互相覆蓋。
+
+**Solution**
+
+* 使用 `DeployEnvironmentType` 限制實際部署環境
+* 切換環境時重新載入該環境的 Values 與 Project Files
+* 儲存時只更新目前 Environment
+* 保留其他 Environment 原有設定
+* 修改單一 Template 時，保留其他 Template 的資料
+* 將 ENV 與 MOUNT 統一儲存在 `configFiles`
+* 將 Project File 的可用環境與實際部署環境分開處理
+
+---
+
+## Project File 的 ALL 規則
+
+**Challenge**
+
+Project File 的 `ALL` 代表所有環境皆可使用，但 Selected Configuration 不允許使用 `ALL` 作為部署環境。
+
+**Solution**
+
+前端會將 `ALL` 視為檔案的可用範圍，讓該檔案可以在 DEV、UAT、PROD 中被選擇。
+
+實際儲存 Selected Configuration 時，仍使用目前選擇的 DEV、UAT 或 PROD，避免混淆「可用範圍」與「部署環境」。
+
+---
+
+## Template 與 Deployment Preview
+
+**Challenge**
+
+Helm、Dockerfile 與 Shell 具有不同設定需求，而且 Template、Version、Values 與 Preview 之間存在相依關係。
+
+**Solution**
+
+* Template 改變時重新載入 Version
+* Version 改變時重新取得 Default Values
+* 上游選擇改變時清除舊 Preview
+* 支援 Public Template 與 Custom Template
+* Dockerfile 強制選擇可用的 Base Image Version
+* Helm 整合 ConfigMap、Secret 與 Manifest
+* Shell 管理 Helm Wait 與 Deployment Completion Mode
+* 呼叫不同 Preview API 顯示最終 Render 結果
+* 解析 Manifest Resource，檢查 ConfigMap 與 Secret 命名衝突
+
+---
+
+## 非同步 Push Task
+
+**Challenge**
+
+Image Push 由後端非同步執行，前端需要根據任務狀態提供不同操作，並保持 List 與 Detail 資料一致。
+
+**Solution**
+
+* PENDING 提供 Execute 與 Delete
+* RUNNING 顯示執行中狀態並禁止重複操作
+* FAILED 顯示 Failure Reason 並提供 Retry
+* 使用 Task ID 管理單筆 Loading State
+* 操作完成後重新載入 Task List
+* Detail Modal 開啟時同步更新 Task Detail
+* 使用 Push Log 保留持久化的執行與失敗紀錄
+
+---
+
+## 共用元件與大型 Component
+
+**Challenge**
+
+隨著功能增加，頁面狀態與 Component 規模持續成長，也出現重複的 Modal、Status、Pagination 與 Loading 實作。
+
+**Solution**
+
+已逐步建立：
+
+* Common Modal
+* Status Badge
+* Pagination
+* Inline Loading
+* Common Icons
+* Project File Table
+* Base Image Selector
+* Template Version List
+* Project Selected Config Panel
+
+同時將純 UI 行為整理成 Common Component，將包含業務規則的功能保留為 Domain Component。
+
+大型 Component 的拆分仍是持續進行的工作。後續會繼續將資料載入、表單驗證與不同 Template 的設定流程拆分，降低單一 Component 的複雜度。
 
