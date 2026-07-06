@@ -28,7 +28,7 @@ The platform aims to improve deployment consistency, reduce manual operations, a
 * Helm Charts
 * Dockerfile Templates
 * Shell Templates
-* Artifact Version Management
+* Artifact Version/Usage Management
 
 集中管理部署相關 Artifact，並支援版本管理。
 
