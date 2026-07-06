@@ -87,14 +87,5 @@ The platform aims to improve deployment consistency, reduce manual operations, a
 
 * Keycloak
 
----
 
-#  Documentation｜專案文件
-
-| Document            | Description                               |
-| ------------------- | ----------------------------------------- |
-| Architecture.md     | System Architecture / 系統架構                |
-| Frontend-Journey.md | My React Learning Journey / React 成長紀錄    |
-| Backend-Journey.md  | Backend Development Journey / 後端開發歷程      |
-| Decisions.md        | Architecture & Design Decisions / 架構與設計決策 |
 
