@@ -1,10 +1,3 @@
-#  Enterprise Kubernetes CI/CD Platform
-
-> **An internal enterprise Kubernetes CI/CD platform built with Java, Spring Boot, React, TypeScript, Docker, Kubernetes, Helm, Harbor, and Keycloak.**
-> **一套以 Java、Spring Boot、React、TypeScript、Docker、Kubernetes、Helm、Harbor 與 Keycloak 打造的企業級 Kubernetes CI/CD 平台。**
-
----
-
 #  Overview｜專案介紹
 
 This project is an internal enterprise Kubernetes CI/CD platform designed to streamline application deployment through reusable deployment templates, environment-specific configurations, centralized artifact management, and deployment automation.
