@@ -52,15 +52,6 @@ DEV / UAT / PROD
 Deployment Package
    │
    ▼
-Docker Build
-   │
-   ▼
-Helm Deploy
-   │
-   ▼
-Kubernetes
-   │
-   ▼
 Deployment History
 ```
 
