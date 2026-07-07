@@ -123,7 +123,7 @@ Storage Metadata 與 Binary Files 分離，降低 Database 負擔，也方便未
 
 ---
 
-#  Technology Stack｜技術棧
+#  Technology Stack｜使用技術
 
 ### Backend
 
