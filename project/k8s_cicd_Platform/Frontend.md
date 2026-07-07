@@ -40,6 +40,8 @@
 
 ### Overview
 
+<img width="565" height="501" alt="image" src="https://github.com/user-attachments/assets/a2066309-cb64-45e0-98cf-c3a2e27890c2" />
+
 平台採用 Keycloak 作為統一身分驗證服務。
 
 前端負責登入導向、Callback 處理、Token 管理、使用者狀態管理，以及依照角色限制頁面與功能存取。
