@@ -38,7 +38,7 @@ Artifact Management
 Artifact Version
    │
    ▼
-Template Management (will storage on Harbor)
+Template Management (Stored in Harbor)
 (Helm / Dockerfile / Shell)
    │
    ▼
@@ -49,7 +49,7 @@ DEV / UAT / PROD
 (Environment Isolation)
    │
    ▼
-Deployment Package (will storage on Desk)
+Deployment Package (Stored on Local Storage)
    │
    ▼
 Deployment History
