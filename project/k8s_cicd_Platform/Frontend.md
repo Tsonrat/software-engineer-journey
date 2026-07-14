@@ -385,6 +385,7 @@ API 發生錯誤時，前端也需要區分：
 <img width="973" height="694" alt="image" src="https://github.com/user-attachments/assets/4b7d8ea0-5510-4a73-90b0-1aa2ee963c20" />
 <img width="1713" height="799" alt="image" src="https://github.com/user-attachments/assets/67f7a053-1846-4734-94df-b22395f2cf81" />
 <img width="1148" height="708" alt="image" src="https://github.com/user-attachments/assets/f2f93afe-7cba-43ee-85f2-252efd2f0ca5" />
+<img width="1545" height="710" alt="image" src="https://github.com/user-attachments/assets/04848050-2795-43bf-a274-211facb8bf4d" />
 
 Project Selected Configuration 是整個平台中最重要且較複雜的前端功能之一。
 
