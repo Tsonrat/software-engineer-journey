@@ -1,5 +1,3 @@
-<img width="1644" height="111" alt="image" src="https://github.com/user-attachments/assets/a4fc8de8-638d-404f-93a2-d6a6a9affbdb" /># Frontend Development｜前端開發
-
 本文件記錄我在 **Enterprise Kubernetes CI/CD Platform** 專案中的前端開發內容。
 
 本專案採用 **React、TypeScript 與 Vite** 開發企業管理平台，目標是將 Kubernetes 部署流程、Artifact 管理、多環境設定及部署自動化等功能，整合成一致且容易操作的 Web 管理介面。
@@ -31,6 +29,197 @@
 整個平台以 React Component 為基礎，搭配 TypeScript 建立前端 Domain Model，並透過 Axios 與 Spring Boot Backend 提供的 REST API 進行整合。
 
 前端不只負責呈現後端資料，也需要將 Kubernetes、Harbor、OCI Artifact 與 Template Rendering 等較複雜的概念，轉換成使用者能夠理解與操作的流程。
+
+---
+
+# Frontend Architecture｜前端架構設計
+
+## Application Architecture｜應用程式架構
+
+### Overview
+
+前端應用程式採用分層方式組成，將登入驗證、路由權限、共用版型、頁面功能、API 串接與資料型別分開管理。
+
+整體結構可以簡化為：
+
+```text
+Application
+  └─ Authentication Provider
+      └─ Router
+          ├─ Authentication Callback
+          └─ Authentication Guard
+              └─ Main Layout
+                  ├─ Top Navigation
+                  ├─ Side Navigation
+                  ├─ Breadcrumb
+                  └─ Role Guard
+                      └─ Page Component
+                          ├─ Domain Component
+                          ├─ Common Component
+                          └─ API Layer
+```
+
+Authentication Provider 負責管理登入狀態、Token 與目前使用者資訊。
+
+Router 負責將 URL 對應至不同功能；需要登入的功能會先通過 Authentication Guard，需要特定角色的功能則會再經過 Role Guard。
+
+Main Layout 統一管理 Top Navigation、Side Navigation、Breadcrumb 與主要內容區域，實際頁面則渲染於 Layout 保留的子路由位置。
+
+Page Component 負責整合畫面狀態、使用者操作與資料載入，並透過 API Layer 與 Backend 溝通。
+
+### Technical Highlights
+
+* Layered Frontend Architecture
+* Authentication Context
+* Nested Routing
+* Route Guard
+* Role-based Access Control
+* Shared Layout
+* Domain Component
+* API Layer
+* Type-safe Data Model
+
+### Design Considerations
+
+將不同責任拆開後，頁面不需要自行處理完整的登入流程、Token Header 或共用版型。
+
+功能開發時，可以沿用既有的 Authentication、Layout、API Configuration、Loading Component 與 Error Handling Pattern，降低重複程式碼。
+
+這種架構也讓權限判斷集中於路由與功能入口，而不是分散在每一個按鈕或頁面中。
+
+---
+
+## Routing and Permission Flow｜路由與權限流程
+
+### Overview
+
+平台使用巢狀路由組織功能頁面，並在不同層級加入登入驗證與角色驗證。
+
+```text
+User enters URL
+  └─ Check authentication callback
+      └─ Check authentication state
+          └─ Check required role
+              └─ Render shared layout
+                  └─ Render target page
+```
+
+Authentication Callback 採用獨立流程處理，不會進入一般管理平台版型。
+
+其他管理功能皆需要通過登入驗證。部分功能具有額外角色限制，使用者通過登入驗證後，系統仍會檢查目前角色是否符合 Route Requirement。
+
+### Authentication Guard
+
+Authentication Guard 主要負責：
+
+* 確認 Authentication 初始化是否完成
+* 確認使用者是否已登入
+* 未登入時啟動登入流程
+* 登入完成後顯示子路由
+* Session 失效時清除登入狀態
+* 避免驗證尚未完成時提前渲染頁面
+
+### Role Guard
+
+Role Guard 主要負責：
+
+* 取得目前使用者角色
+* 比對頁面要求的角色
+* 無權限時阻止頁面載入
+* 有權限時渲染目標功能
+* 將頁面權限規則集中於路由層管理
+
+透過 Route Guard，Authentication 與 Authorization 不需要重複寫在每一個 Page Component 中，也能避免只隱藏選單、卻仍可透過 URL 直接進入受限制頁面的問題。
+
+---
+
+## Layout Composition｜共用版型組成
+
+### Overview
+
+管理平台使用共用 Layout 統一頁面結構，主要包含：
+
+* Top Navigation
+* Side Navigation
+* Breadcrumb
+* Main Content
+* Nested Route Outlet
+
+```text
+Main Layout
+  ├─ Top Navigation
+  ├─ Side Navigation
+  └─ Content Area
+      ├─ Breadcrumb
+      └─ Nested Page Content
+```
+
+Top Navigation 負責顯示平台資訊、目前使用者與選單控制。
+
+Side Navigation 依照目前使用者角色顯示可使用的功能入口，並透過目前 URL 判斷啟用中的選單項目。
+
+Breadcrumb 顯示使用者目前所在的功能層級，Main Content 則透過 Nested Route Outlet 渲染實際的功能頁面。
+
+### State Management
+
+Layout 會管理全域版型所需的狀態，例如：
+
+* Side Navigation 展開與收合
+* Breadcrumb 內容
+* 目前路由位置
+* 使用者角色對應的 Navigation Item
+* 頁面切換時的狀態清理
+
+當路由切換時，系統會清除上一個頁面設定的 Breadcrumb，避免新頁面尚未完成載入時顯示舊的導覽資訊。
+
+---
+
+## Frontend Data Flow｜前端資料流
+
+### Overview
+
+前端功能通常由 Component 呼叫 API Layer，取得 Backend Response 後更新 State，再由 React 重新渲染畫面。
+
+```text
+User Action
+  └─ Event Handler
+      └─ API Function
+          └─ Backend REST API
+              └─ Axios Response
+                  └─ Extract Response Data
+                      └─ Update Component State
+                          └─ Render UI
+```
+
+基本資料流程如下：
+
+```tsx
+const response = await loadData();
+setData(response.data);
+```
+
+### Responsibility Boundary
+
+Page Component 主要負責：
+
+* 取得查詢條件
+* 管理 Loading 與 Error State
+* 呼叫 API Function
+* 更新 Page State
+* 控制 Modal 與 Detail View
+* 操作完成後重新載入資料
+
+API Layer 主要負責：
+
+* Endpoint Path
+* HTTP Method
+* Query Parameter
+* Request Body
+* Response Type
+* TypeScript Generic Type
+* Blob 或 Text Response Configuration
+
+Component 不需要知道共用的 Axios 設定、Authorization Header 或 Backend Base URL。當 API Endpoint 發生變化時，也能集中修改 API Layer。
 
 ---
 
@@ -453,6 +642,174 @@ Modal 則需要維持一致的外觀與開關行為，同時允許 Artifact、Te
 
 ---
 
+# Frontend Interaction Patterns｜前端互動設計模式
+
+## Modal Interaction Pattern｜Modal 互動模式
+
+### Overview
+
+平台中的新增、編輯、詳細資料與設定選擇，大多透過 Modal 完成。Modal 的控制責任分為 Page State 與 Modal State。
+
+```text
+Page Component
+  ├─ Control whether Modal is open
+  ├─ Store selected item
+  ├─ Reload data after success
+  └─ Pass callback to Modal
+
+Modal Component
+  ├─ Initialize form data
+  ├─ Validate input
+  ├─ Submit API request
+  ├─ Display saving state
+  ├─ Display error message
+  └─ Notify Page after success
+```
+
+Page 通常管理 Modal 是否開啟、目前選擇的資料、新增或編輯模式，以及操作完成後的資料刷新。
+
+Modal 則管理 Form State、Validation Error、API Error、Saving State、Preview State 與相依選項。
+
+當 Modal 開啟時，會根據傳入資料初始化表單。儲存期間，按鈕會進入 Disabled 或 Loading 狀態，避免重複送出請求。成功後由 Modal 通知 Page，再由 Page 重新取得列表或詳細資料。
+
+---
+
+## UI Feedback and Transition｜操作回饋與畫面效果
+
+### Overview
+
+企業管理平台中的操作通常涉及 API 請求、非同步任務與資料重新整理，因此前端需要提供清楚的即時回饋。
+
+平台使用不同層級的 Loading State，避免所有操作都以全頁 Loading 呈現。
+
+```text
+Page Loading
+  └─ Initial data loading
+
+Inline Loading
+  └─ Background list refresh
+
+Row Loading
+  └─ Execute / Retry / Delete one item
+
+Modal Loading
+  └─ Save / Resolve / Preview
+```
+
+### List Transition
+
+列表重新查詢時，可以保留舊資料並加入簡單的 Transition State：
+
+```text
+show
+  └─ out
+      └─ update data
+          └─ in
+              └─ show
+```
+
+這能避免資料重新載入時整張表格突然消失或閃爍。
+
+### Status and Event Feedback
+
+平台透過統一的 Status Badge 顯示 Task Status、Artifact Status、Deployment Status、Environment、Platform、Enabled State 與 File Kind。
+
+在可點擊的 Table Row 中，操作按鈕會停止事件向上傳遞，避免點擊 Edit、Retry、Download 或 Delete 時，同時觸發 Row Detail。
+
+```tsx
+event.stopPropagation();
+```
+
+---
+
+## Breadcrumb Navigation Pattern｜麵包屑導覽模式
+
+### Overview
+
+Breadcrumb 的內容由各個 Page Component 設定，共用 Layout 負責顯示。
+
+```text
+Page Component
+  └─ Set breadcrumb items
+      └─ Breadcrumb Context
+          └─ Main Layout
+              └─ Render breadcrumb
+```
+
+Page Component 負責決定目前功能的導覽層級、提供 Label 與可返回的 Route，並在 Detail Data 載入後更新動態名稱。
+
+Layout 則負責統一 Breadcrumb 外觀、顯示可點擊與不可點擊項目，以及在路由切換時清除舊內容。
+
+---
+
+## Frontend Feature Development Flow｜前端功能開發流程
+
+### Overview
+
+平台中的一個完整前端功能通常不只包含單一頁面，而是由資料型別、API Layer、路由權限、頁面狀態、共用元件與操作回饋共同組成。
+
+```text
+Requirement
+  └─ Define Domain Model
+      └─ Define Request and Response Type
+          └─ Implement API Function
+              └─ Register Route and Permission
+                  └─ Build Page State
+                      └─ Compose UI Components
+                          └─ Add Loading and Error Handling
+                              └─ Add Navigation Entry
+                                  └─ Test Frontend and Backend Contract
+```
+
+### Domain and API Contract
+
+首先確認功能中的主要資料結構，包括 ID、Name、Status、Enum、Nullable Field、Request Payload、Response DTO 與 Pagination Structure。
+
+接著使用 TypeScript 建立 Domain Model，並於 API Layer 定義 HTTP Method、Endpoint、Query Parameter、Request Body 與 Response Type。
+
+### Route and Page State
+
+根據功能需求設定是否需要登入、允許哪些角色存取、是否顯示於導覽選單，以及無權限時的處理方式。
+
+Page Component 再依操作流程管理：
+
+* List Data
+* Detail Data
+* Search Keyword
+* Pagination
+* Loading State
+* Error State
+* Selected Item
+* Modal State
+* Action Loading ID
+
+### UI Composition and Refresh
+
+畫面優先使用既有 Common Component 與 Domain Component，例如 Modal、Pagination、Status Badge、Inline Loading、Selector、Detail Panel 與 Data Table。
+
+Create、Update、Delete、Execute 或 Retry 完成後，需要確認 List、Detail、Pagination Total、Selected Item、Related Domain Data 與 Modal Content 是否應重新載入，避免不同區域顯示不同版本的資料。
+
+### Testing Considerations
+
+功能完成後，主要確認：
+
+* Request Payload 是否符合 Backend DTO
+* Enum 值是否一致
+* Nullable Field 是否安全處理
+* API 失敗時是否顯示正確訊息
+* Loading 期間是否避免重複操作
+* 權限不足時是否阻止存取
+* 操作完成後資料是否正確刷新
+* 切換 Route 或 Environment 時是否殘留舊 State
+
+### What I Learned
+
+透過這套開發流程，我逐漸建立從 Domain Model、API Contract、Page State 到 UI Interaction 的完整思考方式。
+
+一個前端功能並不只是完成畫面，而是需要同時考量權限、資料契約、操作狀態、錯誤回饋與後續維護性。
+
+---
+
 # Frontend Technology｜前端技術運用
 
 ## React
@@ -657,4 +1014,3 @@ Image Push 由後端非同步執行，前端需要根據任務狀態提供不同
 同時將純 UI 行為整理成 Common Component，將包含業務規則的功能保留為 Domain Component。
 
 大型 Component 的拆分仍是持續進行的工作。後續會繼續將資料載入、表單驗證與不同 Template 的設定流程拆分，降低單一 Component 的複雜度。
-
