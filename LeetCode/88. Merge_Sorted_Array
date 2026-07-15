@@ -1,0 +1,262 @@
+# 88. Merge Sorted Array
+
+## Description
+
+You are given two integer arrays `nums1` and `nums2`, sorted in non-decreasing order, and two integers `m` and `n`, representing the number of elements in `nums1` and `nums2` respectively.
+
+Merge `nums1` and `nums2` into a single array sorted in non-decreasing order.
+
+The final sorted array should not be returned by the function, but instead be stored inside the array `nums1`. To accommodate this, `nums1` has a length of `m + n`, where the first `m` elements denote the elements that should be merged, and the last `n` elements are set to `0` and should be ignored. `nums2` has a length of `n`.
+
+---
+
+## Example
+
+### Example 1
+
+**Input**
+
+```text
+nums1 = [1,2,3,0,0,0]
+m = 3
+
+nums2 = [2,5,6]
+n = 3
+```
+
+**Output**
+
+```text
+[1,2,2,3,5,6]
+```
+
+---
+
+### Example 2
+
+**Input**
+
+```text
+nums1 = [1]
+m = 1
+
+nums2 = []
+n = 0
+```
+
+**Output**
+
+```text
+[1]
+```
+
+---
+
+### Example 3
+
+**Input**
+
+```text
+nums1 = [0]
+m = 0
+
+nums2 = [1]
+n = 1
+```
+
+**Output**
+
+```text
+[1]
+```
+
+---
+
+#  My Solution
+
+## Solution 1 - Reverse Two Pointers
+
+```java
+class Solution {
+    public void merge(int[] nums1, int m, int[] nums2, int n) {
+
+        int i = m - 1;
+        int j = n - 1;
+        int k = m + n - 1;
+
+        while (j >= 0) {
+
+            if (i >= 0 && nums1[i] > nums2[j]) {
+                nums1[k] = nums1[i];
+                i--;
+            } else {
+                nums1[k] = nums2[j];
+                j--;
+            }
+
+            k--;
+        }
+    }
+}
+```
+
+使用 **Reverse Two Pointers** 的方式，從兩個陣列的最後一個有效元素開始比較。
+
+由於 `nums1` 後方已經預留了足夠的空間，因此可以直接從最後一格開始放入較大的元素，避免覆蓋掉 `nums1` 原本尚未比較的資料。
+
+每次比較 `nums1[i]` 與 `nums2[j]`：
+
+- 若 `nums1[i]` 較大，放入 `nums1[k]`
+- 否則放入 `nums2[j]`
+
+每放完一個元素，就將對應指標往前移動，直到 `nums2` 所有元素都完成合併。
+
+---
+
+#  Note
+
+## Valid Elements
+
+題目中的：
+
+```java
+m
+```
+
+代表：
+
+> `nums1` 有效資料的數量。
+
+```java
+n
+```
+
+代表：
+
+> `nums2` 有效資料的數量。
+
+例如：
+
+```text
+nums1 = [1,2,3,0,0,0]
+m = 3
+```
+
+真正需要處理的是：
+
+```text
+[1,2,3]
+```
+
+後面的：
+
+```text
+0,0,0
+```
+
+只是預留空間，並不是有效資料。
+
+---
+
+## Why Reverse Two Pointers?
+
+如果從前面開始放資料：
+
+```text
+1 2 3 _ _ _
+```
+
+可能會覆蓋掉：
+
+```text
+3
+```
+
+等尚未比較的元素，因此還需要搬移資料。
+
+若改成從尾端開始：
+
+```text
+1 2 3 _ _ _
+          ↑
+```
+
+每次都將目前最大的元素放到最後面，就完全不會覆蓋掉尚未比較的資料。
+
+因此 Reverse Two Pointers 可以直接完成 In-place Merge。
+
+---
+
+## Three Pointers
+
+本題使用三個指標：
+
+```java
+int i = m - 1;
+int j = n - 1;
+int k = m + n - 1;
+```
+
+分別代表：
+
+```text
+i：nums1 最後一個有效元素
+j：nums2 最後一個有效元素
+k：nums1 最後一個位置（放合併結果）
+```
+
+例如：
+
+```text
+nums1
+[1,2,3,0,0,0]
+      ↑     ↑
+      i     k
+
+nums2
+[2,5,6]
+     ↑
+     j
+```
+
+每次比較：
+
+```java
+nums1[i]
+nums2[j]
+```
+
+較大的元素放到：
+
+```java
+nums1[k]
+```
+
+然後移動對應指標：
+
+```text
+i--
+或
+j--
+
+k--
+```
+
+---
+
+## Why `while (j >= 0)`?
+
+只需要判斷：
+
+```java
+while (j >= 0)
+```
+
+因為：
+
+如果 `nums2` 已經全部放完，
+代表 `nums1` 剩餘元素本來就在正確的位置，不需要再搬動。
+但若 `nums1` 已經放完，
+仍然必須將 `nums2` 剩餘元素放入 `nums1`。
+因此只需要判斷 `j` 是否還有有效元素即可。
+
