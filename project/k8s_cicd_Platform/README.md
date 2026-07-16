@@ -1,8 +1,36 @@
 # K8s Deploy Tool — Kubernetes CI/CD Platform
 
-一套自建的 Kubernetes CI/CD 管理平台，將 **Artifact、Template、Project Configuration、Deployment Package 與 Kubernetes Deployment** 整合成版本化、可追蹤且支援多環境的部署流程。
+## K8s Deploy Tool｜Kubernetes CI/CD 管理平台
 
-> 本 Repository 以專案架構、技術決策與開發經驗為主。公開文件不包含公司內部 Credential、實際 API Endpoint、資料表欄位、Registry Host 或儲存路徑。
+A full-stack Kubernetes CI/CD platform designed to standardize artifact management, template versioning, multi-environment deployment, and Kubernetes delivery workflows.
+
+一套企業級 Kubernetes CI/CD 管理平台，整合 **Artifact、Template、Project Configuration、Deployment Package** 與 **Kubernetes Deployment**，提供版本化、可追蹤且支援多環境的部署流程。
+
+> **Repository Notice｜Repository 說明**
+>
+> This repository focuses on software architecture, engineering decisions, and implementation experience.
+>
+> 本 Repository 著重於系統架構、工程設計與開發經驗分享，已移除所有公司內部敏感資訊（如 API Endpoint、Credential、Registry Host、Storage Path、Namespace 等）。
+
+---
+
+# Documentation｜詳細文件
+
+- [Frontend Development](./Frontend.md)  
+  前端架構、Authentication、Routing、API Data Flow、多環境設定、非同步任務 UI、共用元件與互動設計。
+
+- [Backend Development](./Backend.md)  
+  後端分層架構、Domain Module、Deployment Package Generation、Artifact Push Task、Registry/Kubernetes 整合、Storage 與一致性設計。
+
+---
+
+# Table of Contents｜目錄
+
+- Project Overview｜專案簡介
+- Architecture Summary｜架構摘要
+- Technology Stack｜技術棧
+- Documentation｜文件導覽
+- Engineering Principles｜工程設計理念
 
 ---
 
@@ -51,7 +79,11 @@ Docker / Helm / Kubernetes
 Task and Deployment History
 ```
 
-前端將複雜的 Kubernetes、Harbor、Template 與 Environment Configuration 轉換成可操作的管理流程；後端則負責版本解析、驗證、外部系統整合、部署資產渲染與歷史追蹤。
+The platform follows a version-based deployment workflow.
+
+Artifacts and templates are managed centrally, combined with project configurations, rendered into deployment packages, and finally deployed to Kubernetes.
+
+平台採用版本化部署流程，所有 Artifact 與 Template 經由平台管理後，搭配 Project Configuration 產生 Deployment Package，最後完成 Docker Build、Helm Deployment 與 Kubernetes 部署。
 
 ---
 
@@ -64,7 +96,7 @@ Task and Deployment History
 - Vite
 - React Router
 - Axios
-- Keycloak / OAuth 2.0 / OpenID Connect
+- OAuth 2.0 / OpenID Connect
 
 ## Backend
 
@@ -80,19 +112,12 @@ Task and Deployment History
 - Docker
 - Kubernetes
 - Helm
-- Harbor Registry
-- OCI Registry
-- File Storage
-
----
-
-# Documentation｜詳細文件
-
-- [Frontend Development](./Frontend.md)  
-  前端架構、Authentication、Routing、API Data Flow、多環境設定、非同步任務 UI、共用元件與互動設計。
-
-- [Backend Development](./Backend.md)  
-  後端分層架構、Domain Module、Deployment Package Generation、Artifact Push Task、Registry/Kubernetes 整合、Storage 與一致性設計。
+- OCI-compatible Registry
+- OpenTelemetry
+- Grafana
+- Prometheus
+- Loki
+- Tempo
 
 ---
 
