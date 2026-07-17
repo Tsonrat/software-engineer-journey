@@ -1,0 +1,262 @@
+# 0027. Remove Element
+
+## Description
+
+Given an integer array `nums` and an integer `val`, remove all occurrences of `val` in `nums` in-place.
+
+The order of the elements may be changed.
+
+Return the number of elements in `nums` which are not equal to `val`.
+
+To get accepted, you need to do the following things:
+
+* Change the array `nums` such that the first `k` elements of `nums` contain the elements which are not equal to `val`.
+* The remaining elements of `nums` are not important.
+* Return `k`.
+
+---
+
+## Example
+
+### Example 1
+
+**Input**
+
+```text
+nums = [3,2,2,3]
+val = 3
+```
+
+**Output**
+
+```text
+2
+```
+
+**Explanation**
+
+The first two elements of `nums` are:
+
+```text
+[2,2]
+```
+
+Therefore:
+
+```text
+k = 2
+```
+
+---
+
+### Example 2
+
+**Input**
+
+```text
+nums = [0,1,2,2,3,0,4,2]
+val = 2
+```
+
+**Output**
+
+```text
+5
+```
+
+**Explanation**
+
+The first five elements of `nums` contain:
+
+```text
+[0,1,3,0,4]
+```
+
+Therefore:
+
+```text
+k = 5
+```
+
+---
+
+# My Solution
+
+## Solution 1 - Two Pointers
+
+```java
+class Solution {
+    public int removeElement(int[] nums, int val) {
+
+        int k = 0;
+
+        for (int i = 0; i < nums.length; i++) {
+
+            if (nums[i] != val) {
+                nums[k] = nums[i];
+                k++;
+            }
+        }
+
+        return k;
+    }
+}
+```
+
+使用 `i` 遍歷整個 `nums` 陣列，判斷目前的 `nums[i]` 是否等於 `val`。
+
+如果：
+
+```java
+nums[i] != val
+```
+
+代表這個元素需要保留，因此將它放到 `nums[k]` 的位置：
+
+```java
+nums[k] = nums[i];
+```
+
+接著執行：
+
+```java
+k++;
+```
+
+讓 `k` 指向下一個可以放置有效元素的位置。
+
+如果 `nums[i] == val`，則直接跳過該元素。
+
+因此所有不等於 `val` 的元素都會依序被放到陣列前方。
+
+最後回傳：
+
+```java
+return k;
+```
+
+`k` 代表陣列中有效元素的數量，同時也代表 `nums` 前 `k` 個位置為有效答案。
+
+---
+
+# Note
+
+## Two Pointers
+
+這題使用兩個 Index：
+
+```text
+i → 負責遍歷原本的 nums
+k → 負責記錄下一個有效元素要放的位置
+```
+
+當找到不等於 `val` 的元素：
+
+```java
+nums[k] = nums[i];
+k++;
+```
+
+將有效元素依序往陣列前方放。
+
+例如：
+
+```text
+nums = [3,2,2,3]
+val = 3
+```
+
+執行完成後可能為：
+
+```text
+nums = [2,2,2,3]
+k = 2
+```
+
+只有前 `k` 個元素是有效答案：
+
+```text
+[2,2]
+```
+
+`k` 後面的元素不需要處理。
+
+---
+
+## In-place
+
+Java 的 Array 建立後長度固定，因此不能真正將其中的元素刪除並縮短陣列。
+
+這題使用覆寫的方式：
+
+```java
+nums[k] = nums[i];
+```
+
+將需要保留的元素重新放到陣列前方，而不是建立新的 Array。
+
+因此額外空間複雜度為：
+
+```text
+O(1)
+```
+
+---
+
+## return k
+
+方法定義：
+
+```java
+public int removeElement(int[] nums, int val)
+```
+
+`nums` 是傳入並被修改的陣列，而方法最後回傳的型別是 `int`。
+
+因此：
+
+```java
+return k;
+```
+
+並不是回傳新的 Array，也不會讓 `nums` 變成長度為 `k` 的 Array。
+
+它的作用是告訴呼叫端：
+
+```text
+nums[0] ~ nums[k - 1]
+```
+
+是處理完成後的有效範圍。
+
+例如：
+
+```java
+int[] nums = {3, 2, 2, 3};
+
+int k = removeElement(nums, 3);
+```
+
+執行後：
+
+```text
+nums = [2,2,2,3]
+k = 2
+```
+
+可以理解為：
+
+```text
+nums[k] = nums[i] → 修改並整理原本的 nums
+return k          → 告訴呼叫端有效元素的數量
+```
+
+呼叫端需要利用 `k` 才能知道 `nums` 的有效範圍。
+
+---
+
+* Two Pointers 可以使用一個 Index 遍歷資料，另一個 Index 紀錄寫入位置。
+* `nums[k] = nums[i]` 將不等於 `val` 的元素移動到前方。
+* Java Array 長度固定，因此這題不是實際刪除元素，而是重新整理有效元素。
+* `return k` 回傳有效元素數量，讓呼叫端知道 `nums` 的有效範圍。
+
