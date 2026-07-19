@@ -1,0 +1,322 @@
+# 0026. Remove Duplicates from Sorted Array
+
+## Description
+
+Given an integer array `nums` sorted in **non-decreasing order**, remove the duplicates **in-place** such that each unique element appears only once.
+
+The relative order of the elements should be kept the same.
+
+Return the number of unique elements in `nums`.
+
+To get accepted, you need to do the following things:
+
+* Change the array `nums` such that the first `k` elements contain the unique elements in the order they were present in `nums`.
+* The remaining elements of `nums` are not important.
+* Return `k`.
+
+---
+
+## Example
+
+### Example 1
+
+**Input**
+
+```text
+nums = [1,1,2]
+```
+
+**Output**
+
+```text
+2
+```
+
+**Explanation**
+
+The first two elements of `nums` are:
+
+```text
+[1,2]
+```
+
+Therefore:
+
+```text
+k = 2
+```
+
+---
+
+### Example 2
+
+**Input**
+
+```text
+nums = [0,0,1,1,1,2,2,3,3,4]
+```
+
+**Output**
+
+```text
+5
+```
+
+**Explanation**
+
+The first five elements of `nums` are:
+
+```text
+[0,1,2,3,4]
+```
+
+Therefore:
+
+```text
+k = 5
+```
+
+---
+
+# My Solution
+
+## Solution 1 - Two Pointers
+
+```java
+class Solution {
+    public int removeDuplicates(int[] nums) {
+
+        int k = 1;
+
+        for (int i = 1; i < nums.length; i++) {
+
+            if (nums[i] != nums[k - 1]) {
+                nums[k] = nums[i];
+                k++;
+            }
+        }
+
+        return k;
+    }
+}
+```
+
+使用 `i` 遍歷整個 `nums` 陣列，由於第一個元素一定是唯一值，因此：
+
+```java
+int k = 1;
+```
+
+代表第一個元素已經保留。
+
+接著從第二個元素開始比較：
+
+```java
+for (int i = 1; i < nums.length; i++)
+```
+
+如果：
+
+```java
+nums[i] != nums[k - 1]
+```
+
+代表目前的元素不是重複值，因此將它放到：
+
+```java
+nums[k] = nums[i];
+```
+
+接著：
+
+```java
+k++;
+```
+
+讓 `k` 指向下一個可以放置唯一元素的位置。
+
+如果：
+
+```java
+nums[i] == nums[k - 1]
+```
+
+表示目前元素已經出現過，因此直接跳過即可。
+
+最後回傳：
+
+```java
+return k;
+```
+
+`k` 代表陣列中唯一元素的數量，同時也是 `nums` 前 `k` 個位置的有效範圍。
+
+---
+
+# Note
+
+## Two Pointers
+
+這題使用兩個 Index：
+
+```text
+i → 負責遍歷原本的 nums
+k → 負責記錄下一個唯一元素要放的位置
+```
+
+每次都拿目前元素：
+
+```java
+nums[i]
+```
+
+與最後一個保留的元素：
+
+```java
+nums[k - 1]
+```
+
+進行比較。
+
+如果不同：
+
+```java
+nums[k] = nums[i];
+k++;
+```
+
+代表找到新的數字，將它放到陣列前方。
+
+例如：
+
+```text
+nums = [1,1,2,3]
+```
+
+執行完成後：
+
+```text
+nums = [1,2,3,3]
+k = 3
+```
+
+只有：
+
+```text
+[1,2,3]
+```
+
+是有效答案。
+
+---
+
+## Sorted Array
+
+這題最大的重點是：
+
+```text
+Array 已經排序完成 (Sorted)
+```
+
+因此相同的數字一定會連續出現，例如：
+
+```text
+[1,1,2,2,3,3]
+```
+
+因此不需要使用 `HashSet`。
+
+只需要比較：
+
+```java
+nums[i]
+```
+
+是否等於：
+
+```java
+nums[k - 1]
+```
+
+即可知道目前是不是重複元素。
+
+---
+
+## In-place
+
+Java 的 Array 建立後長度固定，因此不能真正將重複元素刪除。
+
+這題使用覆寫的方式：
+
+```java
+nums[k] = nums[i];
+```
+
+將唯一元素重新放到陣列前方，而不是建立新的 Array。
+
+因此額外空間複雜度為：
+
+```text
+O(1)
+```
+
+---
+
+## return k
+
+方法定義：
+
+```java
+public int removeDuplicates(int[] nums)
+```
+
+`nums` 是傳入並被修改的陣列，而方法最後回傳的是：
+
+```java
+return k;
+```
+
+它不是回傳新的 Array。
+
+而是告訴呼叫端：
+
+```text
+nums[0] ~ nums[k - 1]
+```
+
+就是處理完成後的有效範圍。
+
+例如：
+
+```java
+int[] nums = {1,1,2,3};
+
+int k = removeDuplicates(nums);
+```
+
+執行完成後：
+
+```text
+nums = [1,2,3,3]
+k = 3
+```
+
+可以理解為：
+
+```text
+nums[k] = nums[i] → 將唯一元素整理到前方
+return k          → 告訴呼叫端有效元素共有幾個
+```
+
+呼叫端需要利用 `k` 才能知道真正的答案。
+
+---
+
+* Two Pointers 可以使用一個 Index 遍歷資料，另一個 Index 紀錄寫入位置。
+* `nums[k] = nums[i]` 將新的唯一元素移動到陣列前方。
+* `nums[k - 1]` 代表目前最後一個保留下來的唯一元素。
+* 因為陣列已排序，所以只需要比較相鄰的唯一元素即可判斷是否重複。
+* Java Array 長度固定，因此這題不是實際刪除元素，而是重新整理唯一元素。
+* `return k` 回傳唯一元素數量，讓呼叫端知道 `nums` 的有效範圍。
+* 時間複雜度：`O(n)`。
+* 空間複雜度：`O(1)`。
