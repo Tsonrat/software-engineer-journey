@@ -107,8 +107,8 @@ flowchart TD
 
 | Area | Technologies |
 |---|---|
-| Frontend | React 18, TypeScript, Vite, React Router, Axios, Zustand, Bootstrap |
-| Backend | Java 17, Spring Boot 3, Spring MVC, Spring Data JPA, Spring Security |
+| Frontend | React , TypeScript, Vite, React Router, Axios, Zustand, Bootstrap |
+| Backend | Java , Spring Boot , Spring MVC, Spring Data JPA, Spring Security |
 | Data and Storage | MySQL, File Storage Abstraction |
 | Authentication | OAuth 2.0, OpenID Connect, Authorization Code with PKCE, JWT Role Authorization |
 | Artifact and Registry | OCI-compatible Registry, OCI Artifact and Multi-platform Image Operations |
