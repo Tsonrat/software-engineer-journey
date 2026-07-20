@@ -46,7 +46,7 @@
 
 | Technology | Usage |
 |---|---|
-| React 18 | 建立管理頁面、互動流程與可重用元件。 |
+| React | 建立管理頁面、互動流程與可重用元件。 |
 | TypeScript | 定義 Domain Model、API Contract、Component Props、Form State 與 Enum。 |
 | Vite | Development Server、Environment Configuration、API Proxy 與 Production Build。 |
 | React Router | Nested Routing、Authentication Guard、Role Guard 與頁面導覽。 |
