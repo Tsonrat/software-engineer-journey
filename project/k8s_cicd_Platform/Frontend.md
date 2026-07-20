@@ -1,1017 +1,582 @@
-本文件記錄我在 **Enterprise Kubernetes CI/CD Platform** 專案中的前端開發內容。
+# Frontend Development｜前端開發
 
-本專案採用 **React、TypeScript 與 Vite** 開發企業管理平台，目標是將 Kubernetes 部署流程、Artifact 管理、多環境設定及部署自動化等功能，整合成一致且容易操作的 Web 管理介面。
+本文件介紹 K8s Deploy Tool 的前端架構、核心管理流程與工程設計。
 
-除了功能開發之外，我也持續重構元件架構、改善使用者操作流程、建立共用元件，並思考前後端責任分工與整體系統設計，希望打造一套具備良好維護性與擴充性的企業級前端架構。
+前端使用 **React、TypeScript 與 Vite** 建立，負責將 Registry、OCI Artifact、Deployment Template、多環境設定與 Kubernetes Delivery 等技術概念，轉換成可操作、可驗證且具備狀態回饋的 Web 管理介面。
 
----
+除了資料呈現與表單操作，前端也涵蓋 Authentication、Role-based Routing、API Contract、Deployment Asset Preview、非同步任務追蹤、檔案下載與錯誤處理。
 
-# Project Overview｜專案概述
-
-在此專案中，我負責前端管理平台的設計與開發，主要涵蓋：
-
-* 使用者登入與權限驗證
-* Registry 管理
-* Artifact 與 Artifact Version 管理
-* Docker Image Tag 管理
-* Helm、Dockerfile 與 Shell Template 管理
-* Project 與 Project Group 管理
-* ConfigMap、Secret 與 Project File 管理
-* DEV、UAT、PROD 多環境部署設定
-* Deployment Preview
-* Artifact Push Task
-* Artifact Push Log
-* Deployment Log
-* API Layer 設計
-* TypeScript Domain Model 建立
-* 共用元件設計與重構
-
-整個平台以 React Component 為基礎，搭配 TypeScript 建立前端 Domain Model，並透過 Axios 與 Spring Boot Backend 提供的 REST API 進行整合。
-
-前端不只負責呈現後端資料，也需要將 Kubernetes、Harbor、OCI Artifact 與 Template Rendering 等較複雜的概念，轉換成使用者能夠理解與操作的流程。
+> **Public Documentation Notice｜公開文件說明**
+>
+> 本文件使用抽象化的功能名稱與流程圖，不包含實際 Identity Provider Endpoint、Registry Host、Namespace、Project Identifier、Credential 或其他環境識別資訊。
 
 ---
 
-# Frontend Architecture｜前端架構設計
+# Documentation Navigation｜文件導覽
 
-## Application Architecture｜應用程式架構
+- [Project Overview｜專案總覽](./README.md)
+- [Backend Development｜後端開發](./Backend.md)
+- [Application Monitoring & Observability｜應用監控與可觀測性](./Observability.md)
 
-### Overview
+---
 
-前端應用程式採用分層方式組成，將登入驗證、路由權限、共用版型、頁面功能、API 串接與資料型別分開管理。
+# Frontend Overview｜前端概述
 
-整體結構可以簡化為：
+前端管理平台涵蓋以下主要領域：
+
+| Domain | Frontend Responsibilities |
+|---|---|
+| Authentication | 登入導向、Callback、Token Lifecycle、使用者狀態與 Route Protection。 |
+| Registry | Registry 查詢、建立、編輯、啟用狀態與內部 Registry 選擇。 |
+| Artifact | Artifact Explorer、Tag Detail、Version、Digest 與 Platform Information。 |
+| Artifact Push Task | Task 建立、執行、Retry、狀態顯示、Detail 與 Persistent Log。 |
+| Template | Helm、Dockerfile、Shell Template 與 Version 的管理、上傳、下載及預覽。 |
+| Project | Project Group、Project、Project File、Custom Template 與環境設定。 |
+| Deployment | Deployment Asset Preview、Package Generation、狀態追蹤與結果下載。 |
+| Image Management | Kubernetes Workload Image Usage、Outdated Image 與 Cleanup Candidate 顯示。 |
+
+前端的核心工作不是單純顯示後端資料，而是將具有先後依賴的選擇、驗證與非同步操作整理成一致的使用者流程。
+
+---
+
+# Technology Stack｜技術棧
+
+| Technology | Usage |
+|---|---|
+| React 18 | 建立管理頁面、互動流程與可重用元件。 |
+| TypeScript | 定義 Domain Model、API Contract、Component Props、Form State 與 Enum。 |
+| Vite | Development Server、Environment Configuration、API Proxy 與 Production Build。 |
+| React Router | Nested Routing、Authentication Guard、Role Guard 與頁面導覽。 |
+| Axios | REST API、Authorization Header、Text Preview、Blob Download 與錯誤處理。 |
+| Zustand | 管理跨元件共用的前端狀態。 |
+| Bootstrap | 管理介面排版、表單與視覺樣式。 |
+| React Dropzone | Template 與 Project File 的拖放上傳互動。 |
+| Ant Design Icons | 共用操作 Icon 與狀態視覺提示。 |
+
+---
+
+# Frontend Structure｜前端目錄結構
+
+前端依照應用程式責任拆分主要目錄：
 
 ```text
-Application
-  └─ Authentication Provider
-      └─ Router
-          ├─ Authentication Callback
-          └─ Authentication Guard
-              └─ Main Layout
-                  ├─ Top Navigation
-                  ├─ Side Navigation
-                  ├─ Breadcrumb
-                  └─ Role Guard
-                      └─ Page Component
-                          ├─ Domain Component
-                          ├─ Common Component
-                          └─ API Layer
+front/src/
+├── api/          # Domain API functions and request types
+├── auth/         # Authentication context and route guards
+├── components/   # Common, layout, modal and domain components
+├── layout/       # Shared application layout
+├── pages/        # Route-level feature pages
+├── types/        # Shared TypeScript domain models
+├── APP.tsx       # Route composition
+└── main.tsx      # Application entry point
 ```
 
-Authentication Provider 負責管理登入狀態、Token 與目前使用者資訊。
-
-Router 負責將 URL 對應至不同功能；需要登入的功能會先通過 Authentication Guard，需要特定角色的功能則會再經過 Role Guard。
-
-Main Layout 統一管理 Top Navigation、Side Navigation、Breadcrumb 與主要內容區域，實際頁面則渲染於 Layout 保留的子路由位置。
-
-Page Component 負責整合畫面狀態、使用者操作與資料載入，並透過 API Layer 與 Backend 溝通。
-
-### Technical Highlights
-
-* Layered Frontend Architecture
-* Authentication Context
-* Nested Routing
-* Route Guard
-* Role-based Access Control
-* Shared Layout
-* Domain Component
-* API Layer
-* Type-safe Data Model
-
-### Design Considerations
-
-將不同責任拆開後，頁面不需要自行處理完整的登入流程、Token Header 或共用版型。
-
-功能開發時，可以沿用既有的 Authentication、Layout、API Configuration、Loading Component 與 Error Handling Pattern，降低重複程式碼。
-
-這種架構也讓權限判斷集中於路由與功能入口，而不是分散在每一個按鈕或頁面中。
+這種結構將 Route-level Page、可重用 Component、API Communication、Authentication 與 Type Definition 分開，使功能可以依 Domain 擴充，而不需要將所有邏輯集中在單一頁面中。
 
 ---
 
-## Routing and Permission Flow｜路由與權限流程
+# Overall Frontend Architecture｜前端整體架構
 
-### Overview
-
-平台使用巢狀路由組織功能頁面，並在不同層級加入登入驗證與角色驗證。
-
-```text
-User enters URL
-  └─ Check authentication callback
-      └─ Check authentication state
-          └─ Check required role
-              └─ Render shared layout
-                  └─ Render target page
+```mermaid
+flowchart TD
+    A["Browser"] --> B["Authentication Context"]
+    B --> C["Router and Route Guards"]
+    C --> D["Shared Management Layout"]
+    D --> E["Feature Page"]
+    E --> F["Domain and Common Components"]
+    E --> G["Domain API Layer"]
+    G --> H["Spring Boot REST API"]
 ```
 
-Authentication Callback 採用獨立流程處理，不會進入一般管理平台版型。
+各層的主要責任如下：
 
-其他管理功能皆需要通過登入驗證。部分功能具有額外角色限制，使用者通過登入驗證後，系統仍會檢查目前角色是否符合 Route Requirement。
+| Layer | Responsibility |
+|---|---|
+| Authentication Context | 管理登入狀態、Token、目前使用者與登出流程。 |
+| Router and Guards | 組合 Route，並在頁面進入前檢查登入與角色。 |
+| Shared Layout | 提供 Top Navigation、Side Navigation、Breadcrumb 與內容區域。 |
+| Feature Page | 管理查詢條件、Page State、Modal、Loading、Error 與操作流程。 |
+| Domain Component | 封裝具有業務語意的 Selector、Configuration Panel 與 Detail View。 |
+| Common Component | 提供 Modal、Pagination、Status Badge 與 Inline Loading 等通用 UI。 |
+| Domain API Layer | 定義 Endpoint、HTTP Method、Request、Response 與下載格式。 |
 
-### Authentication Guard
-
-Authentication Guard 主要負責：
-
-* 確認 Authentication 初始化是否完成
-* 確認使用者是否已登入
-* 未登入時啟動登入流程
-* 登入完成後顯示子路由
-* Session 失效時清除登入狀態
-* 避免驗證尚未完成時提前渲染頁面
-
-### Role Guard
-
-Role Guard 主要負責：
-
-* 取得目前使用者角色
-* 比對頁面要求的角色
-* 無權限時阻止頁面載入
-* 有權限時渲染目標功能
-* 將頁面權限規則集中於路由層管理
-
-透過 Route Guard，Authentication 與 Authorization 不需要重複寫在每一個 Page Component 中，也能避免只隱藏選單、卻仍可透過 URL 直接進入受限制頁面的問題。
+此設計讓 Page Component 專注於使用者流程，不需要自行處理 OIDC 細節、共用 Axios 設定或整體版型。
 
 ---
 
-## Layout Composition｜共用版型組成
+# Routing and Navigation｜路由與導覽
 
-### Overview
+平台使用 Nested Routing 組合管理功能，並將 Authentication、Authorization 與 Layout 放在不同路由層級。
 
-管理平台使用共用 Layout 統一頁面結構，主要包含：
-
-* Top Navigation
-* Side Navigation
-* Breadcrumb
-* Main Content
-* Nested Route Outlet
-
-```text
-Main Layout
-  ├─ Top Navigation
-  ├─ Side Navigation
-  └─ Content Area
-      ├─ Breadcrumb
-      └─ Nested Page Content
+```mermaid
+flowchart TD
+    A["Incoming Route"] --> B{"Authentication callback?"}
+    B -->|Yes| C["Complete OIDC callback"]
+    B -->|No| D["Require authentication"]
+    D --> E["Check required role"]
+    E --> F["Render shared layout"]
+    F --> G["Render feature page"]
 ```
 
-Top Navigation 負責顯示平台資訊、目前使用者與選單控制。
+主要路由群組包含：
 
-Side Navigation 依照目前使用者角色顯示可使用的功能入口，並透過目前 URL 判斷啟用中的選單項目。
+- Home
+- Project Group and Project
+- Deployment
+- Registry
+- Artifact Explorer
+- Image Management
+- Artifact Push Task and Log
+- Helm Template
+- Dockerfile Template
+- Shell Template
 
-Breadcrumb 顯示使用者目前所在的功能層級，Main Content 則透過 Nested Route Outlet 渲染實際的功能頁面。
+`RequireAuth` 負責確認登入狀態，`RequireRole` 負責檢查頁面所需權限。Side Navigation 也會依照目前角色顯示對應入口，但真正的存取控制仍由 Route Guard 與後端 Authorization 共同執行，不能只依賴隱藏選單。
 
-### State Management
+Shared Layout 統一管理：
 
-Layout 會管理全域版型所需的狀態，例如：
+- Top Navigation
+- Side Navigation
+- Breadcrumb
+- Current Route State
+- Nested Page Content
 
-* Side Navigation 展開與收合
-* Breadcrumb 內容
-* 目前路由位置
-* 使用者角色對應的 Navigation Item
-* 頁面切換時的狀態清理
-
-當路由切換時，系統會清除上一個頁面設定的 Breadcrumb，避免新頁面尚未完成載入時顯示舊的導覽資訊。
+當 Route 改變時，頁面會更新導覽資訊，避免 Detail Page、List Page 與上一個功能的 Breadcrumb 互相殘留。
 
 ---
 
-## Frontend Data Flow｜前端資料流
+# Authentication and Authorization｜登入與權限
 
-### Overview
+平台使用 OAuth 2.0 / OpenID Connect Authorization Code Flow with PKCE，並與 OIDC-compatible Identity Provider 整合。
 
-前端功能通常由 Component 呼叫 API Layer，取得 Backend Response 後更新 State，再由 React 重新渲染畫面。
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as React Frontend
+    participant I as OIDC Provider
+    participant B as Backend API
 
-```text
-User Action
-  └─ Event Handler
-      └─ API Function
-          └─ Backend REST API
-              └─ Axios Response
-                  └─ Extract Response Data
-                      └─ Update Component State
-                          └─ Render UI
+    U->>F: Open protected page
+    F->>I: Authorization request with PKCE
+    I-->>F: Authorization callback
+    F->>I: Exchange code for tokens
+    I-->>F: Access and refresh tokens
+    F->>B: API request with bearer token
+    B-->>F: Authorized response
 ```
 
-基本資料流程如下：
+前端 Authentication Flow 包含：
 
-```tsx
-const response = await loadData();
-setData(response.data);
+- 產生 PKCE Verifier、Challenge 與 State。
+- 導向 Identity Provider 進行登入。
+- 在 Callback 驗證 State 並交換 Authorization Code。
+- 解析 JWT 中的使用者資訊與角色。
+- 將不同來源的 Role 資訊轉換成平台使用的權限模型。
+- 透過 Axios Interceptor 加入 Bearer Token。
+- 在 Token 即將失效時執行 Refresh Flow。
+- Refresh 失敗或收到未授權回應時清除登入狀態。
+- 使用 Authentication Guard 與 Role Guard 保護管理頁面。
+
+Callback Flow 也會避免同一組 Authorization Code 因 React Development Mode 的重複 Effect 而被交換兩次。
+
+### Responsibility Boundary｜責任邊界
+
+前端 Route Guard 用於改善導覽與操作體驗，但不取代後端權限驗證。後端仍會驗證 JWT 與角色，避免使用者繞過前端後直接呼叫受限制的 API。
+
+---
+
+# Frontend Request Flow｜前端請求流程
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant P as Page
+    participant A as API Layer
+    participant B as Backend
+
+    U->>P: Trigger action
+    P->>P: Set loading state
+    P->>A: Call domain API
+    A->>B: Send authorized request
+    B-->>A: Return response
+    A-->>P: Axios response
+    P->>P: Update data or error state
+    P-->>U: Render result
 ```
-
-### Responsibility Boundary
 
 Page Component 主要負責：
 
-* 取得查詢條件
-* 管理 Loading 與 Error State
-* 呼叫 API Function
-* 更新 Page State
-* 控制 Modal 與 Detail View
-* 操作完成後重新載入資料
+- 收集使用者輸入與查詢條件。
+- 管理 List、Detail、Selected Item 與 Modal State。
+- 控制 Loading、Saving、Preview 與 Error State。
+- 呼叫對應 Domain API Function。
+- 操作完成後重新載入受影響的資料。
 
 API Layer 主要負責：
 
-* Endpoint Path
-* HTTP Method
-* Query Parameter
-* Request Body
-* Response Type
-* TypeScript Generic Type
-* Blob 或 Text Response Configuration
+- Endpoint Path 與 HTTP Method。
+- Query Parameter 與 Request Body。
+- TypeScript Request / Response Type。
+- JSON、Text、Blob 與 Paginated Response Configuration。
+- 共用 Axios Client 與 Authorization Header。
 
-Component 不需要知道共用的 Axios 設定、Authorization Header 或 Backend Base URL。當 API Endpoint 發生變化時，也能集中修改 API Layer。
-
----
-
-# Key Implementations｜核心功能實作
-
-## Authentication｜登入與權限驗證
-
-### Overview
-
-<img width="565" height="501" alt="image" src="https://github.com/user-attachments/assets/a2066309-cb64-45e0-98cf-c3a2e27890c2" />
-
-平台採用 Keycloak 作為統一身分驗證服務。
-
-前端負責登入導向、Callback 處理、Token 管理、使用者狀態管理，以及依照角色限制頁面與功能存取。
-
-這部分不只是製作登入畫面，也包含完整的 Authentication 與 Authorization Flow。
-
-### Implementation
-
-* Keycloak OpenID Connect
-* OAuth 2.0 Authorization Code Flow with PKCE
-* Login Redirect
-* Callback Handling
-* Authorization Code Exchange
-* JWT Parsing
-* Access Token Management
-* Refresh Token Flow
-* Logout Flow
-* Role-based Route Protection
-* Axios Authorization Header
-* Unauthorized Session Handling
-
-### Technical Highlights
-
-* OAuth 2.0
-* OpenID Connect
-* PKCE
-* JWT
-* Authentication
-* Authorization
-* Route Guard
-* Token Lifecycle
-* Axios Interceptor
-
-### Challenges
-
-登入功能的難點不只是在畫面上提供登入按鈕，而是管理完整的 Token Lifecycle。
-
-前端需要在導向 Keycloak 前產生 PKCE Verifier、Challenge 與 State，並在 Callback 時驗證 State，避免接受不合法的登入回傳。
-
-取得 Access Token 後，前端會解析 JWT 中的使用者資料與角色，並透過 Axios Interceptor 統一加入 Authorization Header。
-
-當 Token 即將過期時，系統會嘗試使用 Refresh Token 取得新的 Access Token；如果更新失敗或 API 回傳 `401 Unauthorized`，則清除登入狀態並重新進入驗證流程。
-
-不同 Keycloak Client 或 Realm 中的角色格式也可能不同，因此前端需要整理 Realm Role、Resource Role 與角色名稱格式，轉換成平台使用的統一權限模型。
-
-另外，React 開發模式下 Effect 可能重複執行，因此 Callback 頁面也需要避免同一組 Authorization Code 被交換兩次。
-
-### What I Learned
-
-透過此功能，我實際理解了前端 Authentication Flow、JWT Token 管理、Token Refresh，以及 Role-based Access Control 在企業管理平台中的應用。
-
-我也了解到登入功能不只是畫面與 API 串接，而是需要完整考量登入狀態、Token 過期、未授權回應及路由保護。
-
----
-
-## REST API Integration｜REST API 串接
-
-### Overview
-
-前端透過 Axios 建立 API Layer，與 Spring Boot Backend 提供的 REST API 進行整合。
-
-API Function 依照 Domain 拆分，讓 Component 專注於畫面與互動流程，API Layer 則負責 Endpoint、Request Parameter、Request Body 與 Response Type。
-
-### Implementation
-
-* API Layer Design
-* Axios Configuration
-* Axios Interceptor
-* Request / Response Type
-* Authorization Header
-* Query Parameter
-* Pagination API
-* Text Preview Response
-* Blob Download
-* Loading State
-* Error Handling
-
-API 依照功能拆分，例如：
-
-* Registry API
-* Artifact API
-* Artifact Version API
-* Artifact Push Task API
-* Artifact Push Log API
-* Helm Template API
-* Dockerfile Template API
-* Shell Template API
-* Project API
-* Project File API
-* Project Selected Config API
-* Deployment API
-* Deployment Log API
-
-前端 API Function 會保留完整的 `AxiosResponse`：
+前端 API Function 保留完整的 `AxiosResponse`，由呼叫端明確取得資料：
 
 ```ts
-const res = await getArtifactPushTasks();
-const data = res.data;
+const response = await loadResources();
+setResources(response.data);
 ```
 
-### Technical Highlights
+不同 Response 類型會採取不同處理方式：
 
-* Axios
-* AxiosResponse
-* Axios Interceptor
-* Type-safe API
-* Loading State
-* Error State
-* Pagination
-* Blob Download
-* Text Response
-* Frontend and Backend Contract
-
-### Challenges
-
-不同 API 的資料形式並不完全相同。
-
-除了一般 JSON DTO，也包含純文字 Preview、Blob 檔案下載與分頁資料，因此前端需要依照 Response 類型進行不同處理。
-
-例如：
-
-* Helm、Dockerfile 與 Shell Preview 使用文字格式回傳
-* Rendered Deployment Asset 使用 Blob 接收並建立下載流程
-* 列表 API 需要處理 Page、Size、Content 與 Total Elements
-* Detail API 需要處理 Modal Loading 與查詢失敗狀態
-
-另一項挑戰是前後端 DTO 會隨功能持續演進，因此需要同步維護 TypeScript Request 與 Response 型別，避免欄位名稱、Nullable 狀態及 Enum 值不一致。
-
-API 發生錯誤時，前端也需要區分：
-
-* 頁面載入失敗
-* 表單儲存失敗
-* 單一操作失敗
-* Authentication 失效
-* 檔案下載失敗
-* Preview 產生失敗
-
-同時也需要正確管理 Loading State，避免使用者在 API 尚未完成時重複送出請求。
-
-### What I Learned
-
-透過 API Layer 的設計，我逐漸理解 Component 與 API Function 的責任分工，以及如何維持前後端資料契約一致。
-
-我也學會處理 JSON、Text、Blob 與 Pagination 等不同 Response 類型，並建立較容易維護的前端資料流。
+| Response Type | Frontend Handling |
+|---|---|
+| JSON DTO | 更新 List、Detail 或 Form State。 |
+| Paginated JSON | 處理 Content、Page、Size 與 Total Elements。 |
+| Plain Text | 顯示 Rendered Helm、Dockerfile 或 Shell Preview。 |
+| Blob | 建立 Deployment Asset 或 Package Download。 |
 
 ---
 
-## Project Selected Configuration｜多環境部署設定
+# Feature Modules｜功能模組
 
-### Overview
+## Registry and Artifact Explorer｜Registry 與 Artifact Explorer
 
-<img width="973" height="694" alt="image" src="https://github.com/user-attachments/assets/4b7d8ea0-5510-4a73-90b0-1aa2ee963c20" />
-<img width="1713" height="799" alt="image" src="https://github.com/user-attachments/assets/67f7a053-1846-4734-94df-b22395f2cf81" />
-<img width="1148" height="708" alt="image" src="https://github.com/user-attachments/assets/f2f93afe-7cba-43ee-85f2-252efd2f0ca5" />
-<img width="1545" height="710" alt="image" src="https://github.com/user-attachments/assets/04848050-2795-43bf-a274-211facb8bf4d" />
+Registry Management 提供 Registry 的建立、編輯、查詢與啟用狀態管理。Artifact Explorer 則以 Registry、Artifact 與 Tag 的層級呈現 OCI Artifact，並提供版本、Digest 與 Platform Detail。
 
-Project Selected Configuration 是整個平台中最重要且較複雜的前端功能之一。
+主要互動包含：
 
-使用者可以針對不同部署環境選擇 Helm、Dockerfile 與 Shell Template，設定 Template Values、Project Files 與 Docker Base Image，並在部署前預覽最後產生的內容。
+- Registry List、Detail 與 Enable / Disable。
+- Registry-based Artifact Navigation。
+- Artifact Tag 與 Version Detail。
+- Digest 與 OCI Platform Information。
+- Artifact Push 或 Retry Entry Point。
+- Search、Filter 與 Pagination。
 
-支援的部署環境包含：
+前端將 Registry 的階層式資料轉換成可逐層探索的管理流程，並在列表與詳細資料之間維持目前查詢條件及選擇狀態。
 
-* DEV
-* UAT
-* PROD
+---
 
-### Implementation
+## Template Management｜Template 管理
 
-* Public Template Selection
-* Project Custom Template Selection
-* Template Version Selection
-* Docker Base Image Selection
-* Docker Base Image Version Selection
-* ConfigMap Selection
-* Secret Selection
-* ENV File Selection
-* MOUNT File Selection
-* Manifest File Selection
-* Values Configuration
-* Environment Switching
-* Default Values Preview
-* Deployment Preview
-* Configuration Validation
-* Environment-specific Save Flow
+平台分別管理 Helm、Dockerfile 與 Shell Template。每一種 Template 都具有自己的版本、檔案內容、Metadata 與 Validation Requirement。
 
-設定完成後，可以預覽：
+前端提供：
 
-* Rendered Helm YAML
-* Rendered Dockerfile
-* Rendered Shell Script
+- Template List、Create、Update 與 Delete。
+- Template Version Upload、List、Detail、Download 與 Delete。
+- 共用 Template Version List 與 Detail Modal。
+- Public Template 與 Project Custom Template 選擇。
+- Version-dependent Default Values Loading。
+- Rendered Content Preview 與 Download。
 
-### Technical Highlights
+Dockerfile Template 還需要呈現 Runtime Type、Package Type、JDK / Runtime Mode 與其他 Template Metadata，使使用者能選擇符合目標服務的版本，而不是將所有 Runtime 視為同一種模板。
 
-* Multi-environment Configuration
-* Environment Isolation
-* Type-safe State Management
-* Dependent Select Flow
-* Template Rendering Preview
-* Domain Model Design
-* Configuration Validation
-* Environment-specific Data
-* Public and Custom Template Source
+---
 
-### Challenges
+## Project and Project Files｜Project 與檔案管理
 
-此功能最大的挑戰，是在同一個操作流程中管理三種 Template、三個部署環境，以及多組彼此相依的選項。
+Project Module 將 Project Group、Project Metadata、Project File、Custom Template 與 Selected Configuration 整合在同一個 Detail Workflow。
 
-Template Source、Template、Version、Values 與 Preview 之間具有先後依賴關係。當上游選擇改變時，前端需要清除已經失效的 Version 或 Preview，避免畫面保留舊資料。
+Project File 支援不同用途與環境可用範圍，包括：
 
-切換 DEV、UAT、PROD 時，前端需要重新載入該環境的 Values 與 Project Files，並只更新目前環境的 ConfigMap、Secret 與 Template 設定，保留其他環境既有資料。
+- ConfigMap
+- Secret
+- ENV Usage
+- MOUNT Usage
+- Manifest-related Resource
 
-前端使用明確的 TypeScript Union Type 限制可選部署環境：
+前端需要同時表達「檔案在哪些環境可用」以及「目前部署設定屬於哪個環境」，這兩個概念不能混為同一個欄位。
+
+---
+
+## Multi-environment Project Configuration｜多環境專案設定
+
+Project Selected Configuration 是前端最核心的複合操作流程之一。使用者可以在 DEV、UAT、PROD 之間切換，分別選擇 Template、Version、Values、Project Files 與 Docker Base Image。
+
+```mermaid
+flowchart TD
+    A["Select DEV, UAT or PROD"] --> B["Load environment configuration"]
+    B --> C["Select template source and version"]
+    C --> D["Configure values and project files"]
+    D --> E["Select controlled base image"]
+    E --> F["Validate and preview assets"]
+    F --> G["Save current environment"]
+```
+
+### Environment Isolation｜環境隔離
+
+前端的 Deployment Environment Type 僅允許：
 
 ```ts
-type DeployEnvironmentType =
-  | 'DEV'
-  | 'UAT'
-  | 'PROD';
+type DeployEnvironmentType = 'DEV' | 'UAT' | 'PROD';
 ```
-<img width="1379" height="452" alt="image" src="https://github.com/user-attachments/assets/48828823-706e-49ad-9d4f-50bacafe0499" />
 
-Project File 中的 `ALL` 代表該檔案可供所有環境使用，但實際加入 Selected Configuration 時，仍需要記錄為 DEV、UAT 或 PROD。
+Project File 可以標記為 `ALL`，代表 DEV、UAT、PROD 都可以選用該檔案；但 Selected Configuration 實際保存時仍必須屬於其中一個明確環境。
 
-因此，前端需要同時處理：
+因此前端會分開處理：
 
-* Project File 的可用環境
-* Selected Configuration 的實際部署環境
+- **File Availability**：Project File 可在哪些環境使用。
+- **Deployment Ownership**：這筆 Selected Configuration 實際屬於哪個環境。
 
-另外，ENV 與 MOUNT 類型的 Project File 會統一儲存在 `configFiles`，前端需要依照檔案用途、環境與選擇狀態正確建立 Payload。
+切換環境時，前端會載入對應的 Template、Values 與 Config File Selection。儲存時只更新目前環境，避免 DEV、UAT、PROD 互相覆蓋。
 
-Helm、Dockerfile 與 Shell 也具有不同的設定需求：
+### Dependent Selection｜相依選擇
 
-* Helm 需要整合 ConfigMap、Secret、ENV、MOUNT 與 Manifest
-* Dockerfile 必須選擇可用的 Base Image Version
-* Shell 包含 Helm Wait Timeout 與部署完成條件
-* Public Template 與 Custom Template 具有不同的 Version 載入方式
+Template Source、Template、Version、Default Values、Base Image 與 Preview 具有先後依賴。當上游選擇改變時，前端會清除已失效的下游 State，避免舊 Version 或 Preview 被誤認為仍然有效。
 
-儲存其中一種 Template 時，還需要保留未被編輯的其他 Template 設定。例如修改 Helm Configuration 時，不能意外覆蓋 Dockerfile 或 Shell Configuration。
+不同 Template 的設定需求也有所差異：
 
-前端也會解析 Manifest Preview 中的 ConfigMap 與 Secret 名稱，用來檢查選取的 Resource 是否發生命名衝突。
+- Helm 整合 Values、ConfigMap、Secret、ENV、MOUNT 與 Manifest Resource。
+- Dockerfile 需要選擇平台管理且可用的 Base Image Version。
+- Shell 包含 Helm Wait 與部署完成條件等執行參數。
+- Public Template 與 Project Custom Template 使用不同的 Version Loading Flow。
 
-### What I Learned
-
-透過此功能，我學會如何管理較複雜的前端狀態，以及如何設計多環境部署設定流程。
-
-我也更加理解 State 不只是畫面資料，而是需要反映 Template、Version、Environment、Project File 與 Preview 之間的業務關係。
-
-這個功能也讓我學會如何避免不同環境互相覆蓋設定，並維持前後端資料結構的一致性。
+修改其中一種 Template Configuration 時，前端會保留同環境下其他 Template 的既有設定，避免局部編輯意外覆蓋完整設定。
 
 ---
 
-## Artifact Push Task｜映像推送任務
+## Deployment Asset Preview｜部署資產預覽
 
-### Overview
+使用者在產生 Deployment Package 前，可以先預覽後端根據目前環境設定渲染的內容：
 
-平台透過 Push Task 管理 Docker Image 從外部 Registry 同步至內部 Harbor 的非同步流程。
+- Helm Manifest
+- Dockerfile
+- Shell Script
 
-由於 Image Push 可能需要一定的執行時間，前端需要提供任務狀態、操作按鈕、失敗原因與重試功能，讓使用者能夠掌握映像同步結果。
+```mermaid
+flowchart TD
+    A["Current environment form"] --> B["Preview API request"]
+    B --> C["Backend validation and rendering"]
+    C --> D["Text response"]
+    D --> E["Preview panel"]
+```
 
-### Implementation
+Preview 不由前端自行模擬 Template Rendering，而是將目前選擇交給後端，以與正式 Package Generation 相同的 Domain Rule 產生內容。這能降低前後端渲染邏輯不一致的風險。
 
-* Task Creation
-* Task List
-* Task Detail
-* Task Execution
-* Retry Flow
-* Delete Flow
-* Status-based Action
-* Pagination
-* Per-task Loading State
-* Failure Reason
-* Retry Count
-* OCI Platform Information
-* Push Log
-
-Task Status 包含：
-
-* PENDING
-* RUNNING
-* SUCCESS
-* FAILED
-
-### Technical Highlights
-
-* Asynchronous Workflow
-* Task State Tracking
-* Status-based UI
-* Retry Mechanism
-* Per-item Loading State
-* Error Feedback
-* Task Detail
-* Audit Log
-
-### Challenges
-<img width="1317" height="472" alt="image" src="https://github.com/user-attachments/assets/b1a81561-2e3b-4578-b3ea-e2fef463ded8" />
-<img width="598" height="815" alt="image" src="https://github.com/user-attachments/assets/15a5a0d5-613a-4634-9688-25591011c6b5" />
-
-Push Task 是由後端執行的非同步工作，因此前端不能將它當成一般同步 API 操作。
-
-前端需要根據 Task Status 決定使用者可以進行的操作：
-
-* PENDING：可以執行或刪除
-* RUNNING：顯示執行中狀態，避免重複操作
-* FAILED：顯示失敗原因，並提供 Retry
-* SUCCESS：代表 Image 已完成同步
-
-<img width="1655" height="104" alt="image" src="https://github.com/user-attachments/assets/e154a040-6898-4f27-a068-4f3e35772780" />
-<img width="1644" height="111" alt="image" src="https://github.com/user-attachments/assets/241272a6-de73-4ebc-b700-27ab2545907c" />
-<img width="934" height="641" alt="image" src="https://github.com/user-attachments/assets/54ff223c-3eaf-4406-aa79-be0cab87c7b3" />
-
-
-執行或重試期間，前端使用 Task ID 管理單筆操作的 Loading State，避免一個 Task 執行時鎖定整張列表，也避免相同 Task 被重複送出。
-
-操作完成後，需要同步重新取得 Task List；如果使用者已經開啟 Detail Modal，也需要更新目前 Detail，避免列表與詳細資料顯示不同狀態。
-
-Push Task Detail 會呈現：
-
-* Registry
-* Harbor Project
-* Artifact Path
-* Image Tag
-* Task Status
-* Priority
-* Retry Count
-* Started Time
-* Finished Time
-* Failure Reason
-* Selected OCI Platforms
-
-SUCCESS Task 可能會被快速清理，因此系統另外透過 Push Log 保留持久化的執行紀錄與失敗資訊。
-
-### What I Learned
-
-這是我第一次實作非同步工作流程的前端管理介面。
-
-透過此功能，我開始理解如何根據後端任務狀態提供不同操作，並透過 Loading、Status Badge、Failure Reason 與 Retry Flow，給予使用者清楚的執行回饋。
-
-我也了解到即時任務與持久化操作紀錄具有不同用途，因此 Task 與 Log 應該分開設計與呈現。
+當 Template、Version、Values 或 Base Image 改變時，前端會清除舊 Preview，要求使用者重新產生，避免顯示已過期的結果。
 
 ---
 
-## Reusable Components｜共用元件
+## Deployment Package and History｜部署套件與歷史
 
-### Overview
+前端可以建立 Deployment Package、追蹤產生狀態、查看 Deployment Detail，並在成功後下載結果檔案。
 
-隨著專案功能逐漸增加，我開始重構大型頁面，並將重複的 UI 與操作邏輯整理成 Common Components 和 Domain Components。
+```mermaid
+flowchart TD
+    A["Create deployment package"] --> B["Receive running deployment record"]
+    B --> C["Poll deployment detail"]
+    C --> D{"Status"}
+    D -->|Running| C
+    D -->|Success| E["Enable package download"]
+    D -->|Failed| F["Display error details"]
+```
 
-Common Components 負責通用的 UI 行為；Domain Components 則保留特定業務領域的操作流程。
+Package Generation 為背景工作，因此前端不會將單次 HTTP Request 視為完整執行結果，而是透過 Deployment Record ID 查詢狀態，直到成功或失敗。
 
-### Implementation
+此流程提供：
 
-Common Components 例如：
-
-* Modal
-* Status Badge
-* Pagination
-* Inline Loading
-* Toggle Switch
-* Common Icons
-* Form Style
-
-Domain Components 例如：
-
-* Base Image Selector
-* Template Version List
-* Project File Table
-* Project File Upload Modal
-* Project Selected Config Panel
-* Project Selected Config Modal
-* Artifact Push Task Detail
-* Deployment Detail
-
-### Technical Highlights
-
-* Component Composition
-* Domain Component
-* Common Component
-* Reusable UI
-* Props Design
-* Event Handling
-* UI Consistency
-* Separation of Concerns
-
-### Challenges
-
-共用元件的挑戰，是在重用性與 Domain-specific Requirement 之間取得平衡。
-
-例如 Status Badge 需要同時支援：
-
-* Task Status
-* Artifact Status
-* Platform
-* Environment
-* File Kind
-* Enabled State
-
-Pagination 需要由不同列表共用，但查詢條件與資料載入仍由各自頁面管理。
-
-Modal 則需要維持一致的外觀與開關行為，同時允許 Artifact、Template、Project File 與 Deployment 等功能放入不同的表單內容。
-
-在可點擊的 Table Row 中加入 Preview、Edit、Retry、Download 與 Delete 等操作按鈕時，也需要處理 Event Propagation，避免點擊按鈕時同時觸發 Row Detail。
-
-我將純 UI 行為整理成 Common Components，並將 Base Image Selector、Template Version List 與 Project Selected Config 等具有業務語意的功能保留為 Domain Components，降低頁面之間的重複實作。
-
-### What I Learned
-
-透過持續重構，我開始理解 Component Design 不只是將程式碼拆成不同檔案，而是需要思考元件責任、Props 邊界與重用範圍。
-
-合理的元件拆分可以降低耦合、維持 UI 一致性，也能讓後續需求更容易擴充。
+- Creating / Running Feedback
+- Polling and Status Refresh
+- Success / Failure Result
+- Error Message Display
+- Deployment Detail
+- Generated Package Download
 
 ---
 
-# Frontend Interaction Patterns｜前端互動設計模式
+## Artifact Push Task｜Artifact 推送任務
 
-## Modal Interaction Pattern｜Modal 互動模式
+Registry Artifact 操作可能需要較長執行時間，因此使用 Task-oriented UI 呈現執行狀態、可用操作與歷史資訊。
 
-### Overview
+| Task Status | Frontend Behavior |
+|---|---|
+| PENDING | 提供 Execute 與 Delete 操作。 |
+| RUNNING | 顯示執行中狀態，並避免重複操作。 |
+| SUCCESS | 顯示完成結果與相關 Metadata。 |
+| FAILED | 顯示 Failure Reason，並提供 Retry。 |
 
-平台中的新增、編輯、詳細資料與設定選擇，大多透過 Modal 完成。Modal 的控制責任分為 Page State 與 Modal State。
+前端使用 Task ID 管理單筆 Row Loading State，避免執行一個 Task 時鎖住整張列表。操作完成後會重新整理 Task List；若 Detail Modal 已開啟，也會同步更新 Detail，避免兩個區域顯示不同狀態。
 
-```text
-Page Component
-  ├─ Control whether Modal is open
-  ├─ Store selected item
-  ├─ Reload data after success
-  └─ Pass callback to Modal
-
-Modal Component
-  ├─ Initialize form data
-  ├─ Validate input
-  ├─ Submit API request
-  ├─ Display saving state
-  ├─ Display error message
-  └─ Notify Page after success
-```
-
-Page 通常管理 Modal 是否開啟、目前選擇的資料、新增或編輯模式，以及操作完成後的資料刷新。
-
-Modal 則管理 Form State、Validation Error、API Error、Saving State、Preview State 與相依選項。
-
-當 Modal 開啟時，會根據傳入資料初始化表單。儲存期間，按鈕會進入 Disabled 或 Loading 狀態，避免重複送出請求。成功後由 Modal 通知 Page，再由 Page 重新取得列表或詳細資料。
+Task 用於呈現目前工作狀態，Persistent Push Log 則保存可長期查詢的執行結果與 Metadata Snapshot。前端將兩者分成不同頁面與互動目的。
 
 ---
 
-## UI Feedback and Transition｜操作回饋與畫面效果
+## Kubernetes Image Management｜Kubernetes Image 管理
 
-### Overview
+Image Management Page 將 Kubernetes Workload Image Usage 與平台內管理的 Artifact Version 進行對照，協助使用者理解：
 
-企業管理平台中的操作通常涉及 API 請求、非同步任務與資料重新整理，因此前端需要提供清楚的即時回饋。
+- Workload 目前使用的 Image 與 Tag。
+- Image Version 是否落後於平台管理版本。
+- Artifact 與 Workload 的使用關係。
+- 可以進一步檢查的 Cleanup Candidate。
+- Base Image 更新到可用版本的操作入口。
 
-平台使用不同層級的 Loading State，避免所有操作都以全頁 Loading 呈現。
+前端負責呈現掃描結果、Filter、Status 與操作回饋；實際 Kubernetes Query、Digest Matching 與版本分析由後端處理。
 
-```text
-Page Loading
-  └─ Initial data loading
+---
 
-Inline Loading
-  └─ Background list refresh
+# Reusable Components｜共用元件
 
-Row Loading
-  └─ Execute / Retry / Delete one item
+前端將純 UI 行為與 Domain-specific Workflow 分開，以避免共用元件承擔過多業務規則。
 
-Modal Loading
-  └─ Save / Resolve / Preview
-```
+## Common Components｜通用元件
 
-### List Transition
+| Component | Responsibility |
+|---|---|
+| Modal | 提供一致的開關、標題、內容與操作區域。 |
+| Status Badge | 顯示 Task、Artifact、Deployment、Environment、Platform 與 Enabled State。 |
+| Pagination | 統一 Page、Size、Total 與切頁互動。 |
+| Inline Loading | 在保留既有內容時顯示背景更新狀態。 |
+| Common Icons | 統一 Edit、Delete、Download、Retry 與 Preview 等操作視覺。 |
 
-列表重新查詢時，可以保留舊資料並加入簡單的 Transition State：
+## Domain Components｜領域元件
 
-```text
-show
-  └─ out
-      └─ update data
-          └─ in
-              └─ show
-```
+| Component | Responsibility |
+|---|---|
+| Base Image Selector | Search、Registry Filter、Pagination 與 Base Image Version Selection。 |
+| Template Version List | 共用 Template Version List 與操作入口。 |
+| Template Version Detail | 顯示 Version Metadata 與下載操作。 |
+| Project File Table | 顯示 File Kind、Usage、Environment 與選擇狀態。 |
+| Project Selected Config Panel | 顯示各環境目前保存的 Template 與設定摘要。 |
+| Project Selected Config Modal | 管理 Template、Version、Values、Files、Base Image 與 Preview。 |
+| Task / Deployment Detail | 呈現狀態、時間、錯誤與執行結果。 |
 
-這能避免資料重新載入時整張表格突然消失或閃爍。
+Domain Component 保留特定業務語意，Common Component 則維持通用且穩定的 Props Boundary。這樣能提高重用性，同時避免把 Template、Environment 或 Task Rule 寫進純 UI 元件。
 
-### Status and Event Feedback
+---
 
-平台透過統一的 Status Badge 顯示 Task Status、Artifact Status、Deployment Status、Environment、Platform、Enabled State 與 File Kind。
+# Interaction and Feedback Patterns｜互動與回饋模式
 
-在可點擊的 Table Row 中，操作按鈕會停止事件向上傳遞，避免點擊 Edit、Retry、Download 或 Delete 時，同時觸發 Row Detail。
+## Modal Responsibility｜Modal 責任分工
 
-```tsx
+Page Component 通常管理：
+
+- Modal 是否開啟。
+- Create / Edit / Detail Mode。
+- Selected Item。
+- 操作成功後的 List 或 Detail Refresh。
+
+Modal Component 通常管理：
+
+- Form Initialization。
+- Dependent Field State。
+- Validation Error。
+- Saving、Preview 與 API Error State。
+- Submit Request 與 Success Callback。
+
+這個分工讓 Modal 可以獨立處理完整表單流程，而 Page 仍保留資料集合與導覽控制權。
+
+## Loading State｜載入狀態
+
+平台依操作範圍使用不同層級的 Loading Feedback：
+
+| Level | Usage |
+|---|---|
+| Page Loading | 初次載入主要頁面資料。 |
+| Inline Loading | 保留現有畫面並更新列表或部分資料。 |
+| Row Loading | 執行、Retry 或刪除單一項目。 |
+| Modal Loading | 載入 Detail、Default Values 或相依選項。 |
+| Saving State | 表單送出期間 Disable 重複提交。 |
+| Preview State | Rendered Asset 產生期間顯示明確回饋。 |
+
+## Error Handling｜錯誤處理
+
+前端依錯誤發生位置提供不同回饋：
+
+- Page Load Error
+- Form Validation Error
+- Save / Delete Error
+- Preview Generation Error
+- File Download Error
+- Asynchronous Task Failure
+- Authentication Expiration
+
+API Error 不只顯示通用失敗訊息；若後端提供可公開給使用者的 Failure Reason，Task Detail 或 Deployment Detail 會在對應操作情境中呈現。
+
+## Event Handling｜事件處理
+
+可點擊 Table Row 中可能同時包含 Edit、Retry、Download 或 Delete 等按鈕。這些按鈕會阻止事件向 Row 傳遞，避免開啟非預期的 Detail：
+
+```ts
 event.stopPropagation();
 ```
 
 ---
 
-## Breadcrumb Navigation Pattern｜麵包屑導覽模式
+# Frontend Engineering Decisions｜前端工程設計決策
 
-### Overview
+- **Authentication concentrated in context and guards**  
+  登入、Token 與 Role 判斷集中管理，避免每個 Page 重複處理驗證流程。
 
-Breadcrumb 的內容由各個 Page Component 設定，共用 Layout 負責顯示。
+- **Authorization enforced at multiple layers**  
+  Navigation、Route Guard 與 Backend Authorization 各自負責呈現、路由與 API 安全，前端隱藏按鈕不被視為真正的權限控制。
 
-```text
-Page Component
-  └─ Set breadcrumb items
-      └─ Breadcrumb Context
-          └─ Main Layout
-              └─ Render breadcrumb
-```
+- **Domain-oriented API modules**  
+  API Function 依 Registry、Artifact、Template、Project 與 Deployment 拆分，使 Endpoint 與 Type 能跟隨 Domain 演進。
 
-Page Component 負責決定目前功能的導覽層級、提供 Label 與可返回的 Route，並在 Detail Data 載入後更新動態名稱。
+- **Explicit TypeScript contracts**  
+  Request、Response、Enum 與 Nullable Field 透過明確型別描述，降低前後端 DTO 不一致造成的 Runtime Error。
 
-Layout 則負責統一 Breadcrumb 外觀、顯示可點擊與不可點擊項目，以及在路由切換時清除舊內容。
+- **Environment as an explicit domain boundary**  
+  DEV、UAT、PROD 不是單純畫面 Tab，而是 Project Configuration 的資料邊界；File Availability 的 `ALL` 與實際 Deployment Environment 分開處理。
 
----
+- **Backend-rendered preview**  
+  前端不複製 Helm、Dockerfile 或 Shell Rendering Rule，而是使用後端 Preview API，確保預覽與正式 Package Generation 使用一致邏輯。
 
-## Frontend Feature Development Flow｜前端功能開發流程
+- **Per-item asynchronous feedback**  
+  Row Action 使用單筆 Loading State，Task 與 Deployment 則依持久化狀態更新 UI，避免以全頁鎖定處理所有長時間操作。
 
-### Overview
-
-平台中的一個完整前端功能通常不只包含單一頁面，而是由資料型別、API Layer、路由權限、頁面狀態、共用元件與操作回饋共同組成。
-
-```text
-Requirement
-  └─ Define Domain Model
-      └─ Define Request and Response Type
-          └─ Implement API Function
-              └─ Register Route and Permission
-                  └─ Build Page State
-                      └─ Compose UI Components
-                          └─ Add Loading and Error Handling
-                              └─ Add Navigation Entry
-                                  └─ Test Frontend and Backend Contract
-```
-
-### Domain and API Contract
-
-首先確認功能中的主要資料結構，包括 ID、Name、Status、Enum、Nullable Field、Request Payload、Response DTO 與 Pagination Structure。
-
-接著使用 TypeScript 建立 Domain Model，並於 API Layer 定義 HTTP Method、Endpoint、Query Parameter、Request Body 與 Response Type。
-
-### Route and Page State
-
-根據功能需求設定是否需要登入、允許哪些角色存取、是否顯示於導覽選單，以及無權限時的處理方式。
-
-Page Component 再依操作流程管理：
-
-* List Data
-* Detail Data
-* Search Keyword
-* Pagination
-* Loading State
-* Error State
-* Selected Item
-* Modal State
-* Action Loading ID
-
-### UI Composition and Refresh
-
-畫面優先使用既有 Common Component 與 Domain Component，例如 Modal、Pagination、Status Badge、Inline Loading、Selector、Detail Panel 與 Data Table。
-
-Create、Update、Delete、Execute 或 Retry 完成後，需要確認 List、Detail、Pagination Total、Selected Item、Related Domain Data 與 Modal Content 是否應重新載入，避免不同區域顯示不同版本的資料。
-
-### Testing Considerations
-
-功能完成後，主要確認：
-
-* Request Payload 是否符合 Backend DTO
-* Enum 值是否一致
-* Nullable Field 是否安全處理
-* API 失敗時是否顯示正確訊息
-* Loading 期間是否避免重複操作
-* 權限不足時是否阻止存取
-* 操作完成後資料是否正確刷新
-* 切換 Route 或 Environment 時是否殘留舊 State
-
-### What I Learned
-
-透過這套開發流程，我逐漸建立從 Domain Model、API Contract、Page State 到 UI Interaction 的完整思考方式。
-
-一個前端功能並不只是完成畫面，而是需要同時考量權限、資料契約、操作狀態、錯誤回饋與後續維護性。
+- **Common UI and domain component separation**  
+  Modal、Pagination 與 Status Badge 保持通用；Base Image Selector、Template Version 與 Project Configuration 則保留 Domain Rule。
 
 ---
 
-# Frontend Technology｜前端技術運用
+# Engineering Challenges｜工程挑戰
 
-## React
-
-使用 React 建立平台管理頁面與互動流程，並透過 Component、Hook 與 React Router 管理：
-
-* 頁面結構
-* 表單狀態
-* Modal
-* Environment Switching
-* Loading State
-* Error State
-* Authentication State
-* Route Protection
-* API Data Flow
-
-React 在此專案中的主要角色，是將後端提供的 Domain Function 轉換成完整且可操作的使用者流程。
+| Challenge | Approach |
+|---|---|
+| OIDC Callback 與 Token Lifecycle | 使用 PKCE、State Validation、Token Refresh、Axios Interceptor 與 Route Guard 建立完整流程。 |
+| 不同 API Response Format | 分別處理 JSON、Paginated JSON、Text Preview 與 Blob Download。 |
+| DEV / UAT / PROD 設定隔離 | 依目前環境載入及保存資料，避免切換或局部修改時覆蓋其他環境。 |
+| Template 相依選項 | 上游選擇改變時清除失效的 Version、Values、Base Image 或 Preview State。 |
+| Public / Custom Template | 依 Template Source 載入不同 Version，同時維持一致的設定介面。 |
+| 長時間 Registry Operation | 使用 Task Status、Row Loading、Failure Reason、Retry 與 Persistent Log 提供回饋。 |
+| Deployment Package Background Job | 使用 Deployment Record 與 Polling 追蹤成功或失敗，而不是依賴單一長連線。 |
+| List and Detail Consistency | 操作完成後同步刷新受影響的 List、Detail、Pagination 與 Selected Item。 |
+| Reusable Component Boundary | 將純 UI 與包含業務規則的 Domain Component 分開。 |
 
 ---
 
-## TypeScript
+# Frontend Contributions｜前端主要貢獻
 
-使用 TypeScript 定義：
+我參與了此管理平台的前端設計、功能實作與重構，主要內容包括：
 
-* Domain Model
-* API Request
-* API Response
-* Component Props
-* Form State
-* Environment Type
-* Task Status
-* Template Type
-* Nullable Field
-
-透過明確的型別定義，讓前端資料結構能與 Spring Boot DTO 保持一致，並在開發階段提早發現欄位名稱、Enum 值或資料格式錯誤。
-
-TypeScript 在此專案中不只是提供基本型別檢查，也用來表達不同 Domain 之間的規則與限制。
+- 建立 React、TypeScript 與 Vite 的管理介面及頁面導覽架構。
+- 實作 OAuth 2.0 / OpenID Connect with PKCE、Token Lifecycle 與 Role-based Route Protection。
+- 建立依 Domain 拆分的 Axios API Layer，處理 JSON、Pagination、Text Preview 與 Blob Download。
+- 實作 Registry、Artifact Explorer、Template、Project、Deployment、Push Task 與 Image Management 等頁面。
+- 實作 DEV、UAT、PROD 多環境 Project Selected Configuration Workflow。
+- 實作 Template Version、Base Image、Project File、Values 與 Preview 的相依選擇流程。
+- 建立 Deployment Asset Preview、Package Status Polling 與 Download Interaction。
+- 建立 Task-oriented UI，包括 Status、Retry、Failure Reason、Row Loading 與 Persistent Log。
+- 重構 Modal、Status Badge、Pagination、Inline Loading 與 Template Version 等共用元件。
+- 整理 Loading、Error、Event Propagation 與 List / Detail Refresh 等一致性互動模式。
 
 ---
 
-## Vite
+# What I Learned｜開發經驗
 
-使用 Vite 建立前端的開發與正式建置流程。
+透過此專案，我對前端工程的理解從單一頁面與 API 串接，延伸到完整的管理平台設計：
 
-主要用途包含：
+- Authentication 不只是登入按鈕，而是 Callback、Token Refresh、Unauthorized Handling 與 Route Protection 的完整生命週期。
+- TypeScript 不只是基本型別檢查，也能用來表達 Environment、Template、Task Status 與 API Contract 等 Domain Rule。
+- 複雜表單的核心是管理資料依賴與失效條件，而不是單純增加更多 State。
+- Preview、Loading、Error 與 Retry 是部署管理流程的一部分，會直接影響使用者是否能判斷操作結果。
+- 非同步 Task 與 Persistent History 解決的是不同問題，前端需要分別呈現即時狀態與長期紀錄。
+- 可重用元件的價值來自清楚的責任與 Props Boundary，而不是只將程式碼拆成更多檔案。
+- 前後端必須共同維護 Authentication、DTO、Enum、Validation 與 Error Response，才能建立穩定的操作流程。
 
-* Development Server
-* Hot Module Replacement
-* Environment Variable
-* Development / Production Mode
-* API Proxy
-* Production Build
+This frontend demonstrates practical experience in full-stack integration, authentication, type-safe API design, multi-environment configuration, asynchronous workflow UX, and reusable component architecture.
 
-開發環境透過 Vite Proxy 將 `/api` 請求轉送至本機 Spring Boot Backend，避免在每個 API Function 中寫死後端位址。
-
-```ts
-server: {
-  proxy: {
-    '/api': {
-      target: 'http://localhost:8080',
-      changeOrigin: true
-    }
-  }
-}
-```
-
-專案也使用 `.env` 與 `.env.production` 管理不同環境的設定。
-
-正式建置時，會先執行 TypeScript 型別檢查，再由 Vite 產生部署所需的靜態檔案。
-
----
-
-# Engineering Challenges｜工程挑戰與解決方式
-
-## Authentication 與 Token Lifecycle
-
-**Challenge**
-
-需要處理 Keycloak 登入、Callback、Token 過期、權限驗證與未授權回應。
-
-**Solution**
-
-* 使用 OAuth 2.0 Authorization Code Flow with PKCE
-* 驗證 Callback State，避免不合法回傳
-* 解析 JWT，建立統一的使用者與角色資料
-* 透過 Axios Interceptor 自動加入 Bearer Token
-* Token 即將過期時使用 Refresh Token 更新
-* 收到 `401 Unauthorized` 時清除 Session
-* 使用 `RequireAuth` 與 `RequireRole` 保護 Route
-* 避免 React Effect 重複交換 Authorization Code
-
----
-
-## 前後端 DTO 與 API Response
-
-**Challenge**
-
-前後端 DTO 持續演進，而且 API Response 同時包含 JSON、Text、Blob 與 Pagination 等不同格式。
-
-**Solution**
-
-* 為 Request、Response 與 Domain Model 建立 TypeScript 型別
-* API Function 保留 `AxiosResponse`
-* Preview API 使用 Text Response
-* 檔案下載使用 Blob Response
-* 列表統一處理 Page、Size、Content 與 Total Elements
-* API 依 Registry、Artifact、Template、Project 等 Domain 拆分
-* 由 Component 管理 Loading、Error 與操作結果
-
----
-
-## 多環境設定與資料隔離
-
-**Challenge**
-
-DEV、UAT、PROD 具有不同 Template、Values 與 Project File 設定，切換或儲存時不能互相覆蓋。
-
-**Solution**
-
-* 使用 `DeployEnvironmentType` 限制實際部署環境
-* 切換環境時重新載入該環境的 Values 與 Project Files
-* 儲存時只更新目前 Environment
-* 保留其他 Environment 原有設定
-* 修改單一 Template 時，保留其他 Template 的資料
-* 將 ENV 與 MOUNT 統一儲存在 `configFiles`
-* 將 Project File 的可用環境與實際部署環境分開處理
-
----
-
-## Project File 的 ALL 規則
-
-**Challenge**
-
-Project File 的 `ALL` 代表所有環境皆可使用，但 Selected Configuration 不允許使用 `ALL` 作為部署環境。
-
-**Solution**
-
-前端會將 `ALL` 視為檔案的可用範圍，讓該檔案可以在 DEV、UAT、PROD 中被選擇。
-
-實際儲存 Selected Configuration 時，仍使用目前選擇的 DEV、UAT 或 PROD，避免混淆「可用範圍」與「部署環境」。
-
----
-
-## Template 與 Deployment Preview
-
-**Challenge**
-
-Helm、Dockerfile 與 Shell 具有不同設定需求，而且 Template、Version、Values 與 Preview 之間存在相依關係。
-
-**Solution**
-
-* Template 改變時重新載入 Version
-* Version 改變時重新取得 Default Values
-* 上游選擇改變時清除舊 Preview
-* 支援 Public Template 與 Custom Template
-* Dockerfile 強制選擇可用的 Base Image Version
-* Helm 整合 ConfigMap、Secret 與 Manifest
-* Shell 管理 Helm Wait 與 Deployment Completion Mode
-* 呼叫不同 Preview API 顯示最終 Render 結果
-* 解析 Manifest Resource，檢查 ConfigMap 與 Secret 命名衝突
-
----
-
-## 非同步 Push Task
-
-**Challenge**
-
-Image Push 由後端非同步執行，前端需要根據任務狀態提供不同操作，並保持 List 與 Detail 資料一致。
-
-**Solution**
-
-* PENDING 提供 Execute 與 Delete
-* RUNNING 顯示執行中狀態並禁止重複操作
-* FAILED 顯示 Failure Reason 並提供 Retry
-* 使用 Task ID 管理單筆 Loading State
-* 操作完成後重新載入 Task List
-* Detail Modal 開啟時同步更新 Task Detail
-* 使用 Push Log 保留持久化的執行與失敗紀錄
-
----
-
-## 共用元件與大型 Component
-
-**Challenge**
-
-隨著功能增加，頁面狀態與 Component 規模持續成長，也出現重複的 Modal、Status、Pagination 與 Loading 實作。
-
-**Solution**
-
-已逐步建立：
-
-* Common Modal
-* Status Badge
-* Pagination
-* Inline Loading
-* Common Icons
-* Project File Table
-* Base Image Selector
-* Template Version List
-* Project Selected Config Panel
-
-同時將純 UI 行為整理成 Common Component，將包含業務規則的功能保留為 Domain Component。
-
-大型 Component 的拆分仍是持續進行的工作。後續會繼續將資料載入、表單驗證與不同 Template 的設定流程拆分，降低單一 Component 的複雜度。
+本前端實作展示了 Full-stack Integration、Authentication、Type-safe API Design、多環境設定、非同步工作流程 UX 與可重用元件架構等實務經驗。
