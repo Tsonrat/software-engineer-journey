@@ -51,9 +51,8 @@
 | Vite | Development Server、Environment Configuration、API Proxy 與 Production Build。 |
 | React Router | Nested Routing、Authentication Guard、Role Guard 與頁面導覽。 |
 | Axios | REST API、Authorization Header、Text Preview、Blob Download 與錯誤處理。 |
-| Bootstrap | 管理介面排版、表單與視覺樣式。 |
-| React Dropzone | Template 與 Project File 的拖放上傳互動。 |
-| Ant Design Icons | 共用操作 Icon 與狀態視覺提示。 |
+| Custom CSS | 管理介面排版、表單、列表、Modal、狀態 Badge 與互動樣式。 |
+| Custom Icon Components | 共用操作 Icon、Loading Spinner 與狀態視覺提示。 |
 
 ---
 
