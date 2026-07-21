@@ -1,607 +1,556 @@
 # Backend Development｜後端開發
 
-本文件記錄我在 **K8s Deploy Tool — Kubernetes CI/CD Platform** 中負責的後端架構、核心流程與系統設計。
+本文件介紹 K8s Deploy Tool 的後端架構、核心部署流程與工程設計。
 
-後端以 **Java、Spring Boot 與 MySQL** 建立平台核心服務，整合 Harbor、OCI Registry、Kubernetes、Helm 與檔案儲存，將 Artifact、Template、Project Configuration 與 Deployment 組成可追蹤、可驗證且可擴充的部署流程。
+後端使用 **Java、Spring Boot 與 MySQL** 建立，負責 Kubernetes 部署專案的設定管理、Template 與 Config 管理、部署資產渲染，以及 Deployment Package 打包。
 
-本文聚焦於後端工程實作，不公開公司內部 API 路徑、資料表欄位、Credential、實際儲存位置或環境設定。
+除了 REST API 與資料持久化，後端也涵蓋 Authentication、Role-based Authorization、Project Hierarchy、Version-based Resource Management、Custom Template、Deployment Asset Rendering、Artifact Push Task 與 Kubernetes Workload Image Usage Scan。
 
----
-
-# Project Overview｜專案概述
-
-後端主要負責：
-
-- Artifact 與 Artifact Version 管理
-- Helm、Dockerfile 與 Shell Template 管理
-- Project 與多環境部署設定
-- Deployment Asset Rendering
-- Deployment Package Generation
-- Artifact Push Task 與持久化操作紀錄
-- Harbor 與 OCI Registry 整合
-- Kubernetes Workload Image Scanning
-- Storage Metadata 與 Binary Content 管理
-- Deployment History 與 Audit Information
-
-平台設計重點包括：
-
-- **Version-based Resource Management**：部署資源以版本為單位管理，避免直接覆蓋造成追蹤資訊遺失。
-- **Environment Isolation**：DEV、UAT、PROD 擁有獨立的設定與資源選擇。
-- **Deployment Reproducibility**：部署時解析明確的 Template Version、Artifact Version 與 Environment Configuration。
-- **Storage Abstraction**：資料庫保存可查詢的 Metadata，實體檔案交由 Storage Service 管理。
-- **External System Encapsulation**：Registry、Kubernetes 與 Storage 操作封裝在獨立服務中。
-- **Operational Traceability**：長時間操作與部署結果皆保留狀態、錯誤與歷史紀錄。
+> **Public Documentation Notice｜公開文件說明**
+>
+> 本文件使用抽象化的模組名稱與流程圖，不包含實際 API Endpoint、Entity 欄位、Database Schema、Registry Host、Cluster Address、Credential、Storage Path、Project Identifier 或公司內部部署腳本內容。
 
 ---
 
-# Backend Architecture｜後端架構設計
+# Documentation Navigation｜文件導覽
 
-## Layered Architecture｜分層架構
+- [Project Overview｜專案總覽](./README.md)
+- [Frontend Development｜前端開發](./Frontend.md)
+- [Application Monitoring & Observability｜應用監控與可觀測性](./Observability.md)
 
-後端採用分層架構，將 HTTP 處理、商業邏輯、資料存取與外部系統整合分離。
+---
+
+# Backend Overview｜後端概述
+
+後端平台涵蓋以下主要領域：
+
+| Domain | Backend Responsibilities |
+|---|---|
+| Authentication and Authorization | 驗證 JWT、解析使用者角色並保護管理 API。 |
+| Project Group | 管理 Project 的上層組織與操作邊界，並提供部分預設行為。 |
+| Project Hierarchy | 管理單一部署 Project、MULTI_MODULE Parent Project 與 Child Module Project 的關係。 |
+| Project Configuration | 管理 DEV、UAT、PROD 環境設定、資源選擇與 Project Files。 |
+| Template | 管理 Public Template、Project Custom Template、版本、驗證與 Rendering Strategy。 |
+| Artifact | 管理可部署資源、版本、狀態、Registry Reference 與使用關係。 |
+| Registry | 封裝 OCI Manifest、Tag、Digest、Platform Metadata 與 Registry Synchronization。 |
+| Deployment | 解析 Project Hierarchy 與環境設定，渲染部署資產並產生 Deployment Package。 |
+| Artifact Push Task | 建立及執行 Registry Synchronization Task，保存狀態、錯誤與持久化結果。 |
+| Image Management | 掃描 Kubernetes Workload Image，並與平台管理版本建立使用關係。 |
+| Storage | 分離可查詢 Metadata 與 Binary Content，支援 Template、Project Resource 與 Package Lifecycle。 |
+| Operation History | 保存 Deployment 與外部操作的執行狀態、結果與錯誤資訊。 |
+
+後端的核心工作不只是提供 CRUD API，而是將 Project、Template、Values、Config Files 與受管理的 Artifact Version 組合成可預覽、可保存及可打包的部署設定。
+
+---
+
+# Technology Stack｜技術棧
+
+| Category | Technology | Usage |
+|---|---|---|
+| Language and Application Framework | Java, Spring Boot | 建立 REST API、Domain Logic、Validation、Persistence、Transaction 與外部系統整合。 |
+| Security | Spring Security, OAuth 2.0 Resource Server, JWT | 驗證使用者身分並執行 Role-based Authorization。 |
+| Database | MySQL | 保存 Resource Metadata、Version Relationship、Project Configuration、Task State 與 Deployment History。 |
+| Registry Integration | Harbor, OCI-compatible Registry | 解析 OCI Artifact、Manifest、Digest、Platform，並執行 Registry Synchronization。 |
+| Container Platform | Kubernetes | 產生 Kubernetes 部署所需資產，並查詢 Workload Image Usage。 |
+
+Helm、Dockerfile、YAML 與 Shell Script 在本平台中屬於 Deployment Asset，因此在後續 Rendering 與 Deployment Package 章節中說明，而不拆成獨立的主要後端技術分類。
+
+本文件著重技術的實際用途與設計關係，因此不特別強調 Framework 或 Runtime 的小版本號。
+
+---
+
+# Backend Structure｜後端目錄結構
+
+後端以業務領域拆分主要模組。以下為公開文件使用的抽象化結構，不代表實際 Package、Class 或檔案名稱：
 
 ```text
-HTTP Request
-    │
-    ▼
-Controller
-    │
-    ▼
-Application / Domain Service
-    ├─ Validation and State Transition
-    ├─ Repository Coordination
-    ├─ Registry Integration
-    ├─ Kubernetes Integration
-    └─ Storage Coordination
-    │
-    ▼
-Repository / External Client / Storage Service
-    │
-    ▼
-Database / Registry / Kubernetes / File Storage
+backend/src/main/java/
+├── artifact/       # Managed resources and version lifecycle
+├── template/       # Public/custom template validation and rendering
+├── project/        # Project group, hierarchy and environment configuration
+├── deployment/     # Resource resolution, rendering and packaging
+├── registry/       # OCI integration and artifact push workflow
+├── kubernetes/     # Workload image discovery and usage analysis
+├── storage/        # Metadata and binary content coordination
+├── security/       # JWT authentication and authorization
+├── common/         # Shared exception, response and utility logic
+└── configuration/  # Application and infrastructure configuration
 ```
 
-### Controller Responsibilities
-
-Controller 保持精簡，主要負責：
-
-- 接收 HTTP Request
-- 綁定 Path、Query 與 Request Body
-- 觸發輸入格式驗證
-- 呼叫對應 Service
-- 回傳 Response DTO 與 HTTP Status
-
-Controller 不處理跨模組流程、狀態轉換或檔案組裝等商業邏輯。
-
-### Service Responsibilities
-
-Service 是後端主要的流程控制層，負責：
-
-- Business Validation
-- Resource State Validation
-- Transaction Boundary
-- Version Resolution
-- Environment-specific Configuration Resolution
-- Cross-domain Coordination
-- External System Integration
-- Deployment Orchestration
-- Error Translation
-
-### Repository and Mapper Responsibilities
-
-Repository 專注於資料查詢與持久化，不負責 Deployment Flow 或外部系統操作。
-
-Mapper 負責 Entity、Domain Data 與 DTO 之間的轉換，避免將商業規則放入單純的資料轉換程式中。
+每個 Domain Module 內部再依需求包含 API、Application Service、Domain Logic、Persistence 與 Infrastructure Integration，使功能可以依業務能力擴充，而不需要將所有 Controller、Service 或 Repository 集中在大型共用目錄中。
 
 ---
 
-## Domain-oriented Module Design｜領域導向模組設計
+# Overall Backend Architecture｜後端整體架構
 
-後端依照業務領域拆分模組，而不是將所有 Controller、Service 與 Repository 集中在同一層目錄中。
+```mermaid
+flowchart TD
+    A["React Management Frontend"] --> B["Spring Security and JWT Authorization"]
+    B --> C["Backend Domain APIs"]
 
-```text
-Backend Domains
-├─ Registry and OCI Governance
-├─ Artifact and Version Management
-├─ Template Management
-├─ Project Configuration
-├─ Deployment Package Generation
-├─ Artifact Push Workflow
-├─ Kubernetes Image Usage
-├─ Storage Management
-└─ Deployment History
+    C --> D["Project Group Management"]
+    D --> E["Project and Project Hierarchy"]
+    E --> F["Project CONFIG Files"]
+    E --> H["Project Custom Template Management"]
+
+    C --> G["Public / Default Template Management"]
+    C --> I["Artifact and Registry Management"]
+
+    E --> J["Selected Configuration"]
+    F --> J
+    G --> J
+    H --> J
+    I --> J
+    K["Values and Environment Parameters"] --> J
+
+    J --> L["Preview and Render Deployment Assets"]
+    L --> M["Save Selected Config and Rendered Output"]
+    M --> N["Deployment Package Generation"]
+    N --> O["Package History and Download"]
+
+    C --> P["Kubernetes Workload Image Usage Scan"]
+    P <--> Q["Kubernetes Cluster"]
 ```
 
-每個模組封裝自己的 API Contract、Validation、Service、Repository 與資料模型，再透過明確的 Service Interface 與其他領域互動。
+平台的主要流程是先建立 Project Group 與 Project，再上傳 Project CONFIG Files。使用者可選擇系統管理的 Public / Default Template，或上傳 Project Custom Template，並在 Selected Configuration 中組合 Template、Values、Config Files、Base Image 與其他環境設定。
 
-這種設計可以降低不同功能間的直接耦合，也讓 Artifact、Template、Project 與 Deployment 等領域能各自演進。
+Selected Configuration 提供 Preview / Render，用於檢查 Helm、Dockerfile 與 Shell 等部署資產。正式保存後，系統會保留目前選定的設定與 Rendered Output；後續執行 **Deploy** 時，會依已保存的 Selected Config 與 Project Files 產生完整 Deployment Package，並提供歷史查詢與下載。
 
----
-
-# Core Modules｜核心模組
-
-## Artifact and Version Management
-
-平台管理的資源包含：
-
-- Docker Image
-- Helm Chart
-- Dockerfile Template
-- Shell Template
-
-Artifact 表示可管理的邏輯資源，Artifact Version 則表示實際可使用、可部署或可追蹤的版本。
-
-建立新版本時不會直接覆蓋既有版本，因此每次 Deployment 都能保存當時解析出的版本資訊、Registry Reference 與 Digest Metadata。
-
-主要能力包括：
-
-- Artifact Lifecycle Management
-- Version Creation and Selection
-- Current Version Management
-- Digest and Registry Metadata Tracking
-- Base Image Eligibility
-- Usage Relationship Tracking
-- Version-level Delete Validation
+> **Deployment boundary｜部署責任邊界**
+>
+> 本平台中的 **Deploy** 指產生與打包 Kubernetes 部署專案，不代表後端會直接對 Kubernetes Cluster 執行 `kubectl` 或 `helm deploy`。目前與 Kubernetes 的直接互動僅限於查詢 Workload Image Usage；實際部署由產出的 Package 在平台外執行。
 
 ---
 
-## Template Management
+# Authentication and Authorization｜登入與權限
 
-Deployment Template 分為：
+後端作為 OAuth 2.0 Resource Server，驗證前端送出的 JWT，並使用 Role-based Authorization 保護管理功能。
 
-- Helm Template
-- Dockerfile Template
-- Shell Template
+```mermaid
+sequenceDiagram
+    participant F as React Frontend
+    participant S as Spring Security
+    participant C as Backend Domain API
+    participant A as Application Service
 
-不同 Template 類型具有各自的 Upload Validation、Version Metadata 與 Rendering Requirement。
-
-Dockerfile Template 依 Runtime 與 Package Type 套用不同驗證規則，避免使用單一 Generic Template 隱藏不同 Build Process 的差異。
-
-Template Version 會作為獨立資源管理，使 Project 可以明確選擇部署時使用的版本，而不是自動依賴可能變動的最新內容。
-
----
-
-## Project Configuration
-
-Project 是平台中的 Deployment Unit，負責連結：
-
-- Template Selection
-- Template Version
-- Managed Artifact
-- Docker Base Image Version
-- ConfigMap and Secret Resources
-- Environment-specific Values
-- Deployment Parameters
-
-DEV、UAT、PROD 各自擁有獨立的 Selected Configuration。
-
-共享檔案可以被不同環境選用，但實際儲存 Deployment Configuration 時，仍會記錄明確的目標環境，區分「資源可用範圍」與「實際部署環境」。
-
----
-
-## Registry and OCI Governance
-
-平台整合 Harbor 與 OCI-compatible Registry，統一管理 Image 與 Template Artifact 的來源、版本與目標位置。
-
-主要能力包括：
-
-- Registry Connectivity and Metadata Management
-- OCI Manifest Resolution
-- Digest Tracking
-- Tag and Version Synchronization
-- Multi-platform Image Resolution
-- Controlled Target Reference Generation
-- Managed Base Image Selection
-
-平台不讓 Deployment 任意輸入未受控的 Base Image Path，而是從已管理且符合狀態要求的 Artifact Version 中選擇，以維持版本可追蹤性。
-
----
-
-## Kubernetes Workload Image Scanning
-
-後端能掃描 Kubernetes Cluster 中 Workload 實際使用的 Container Image，並與平台管理的 Artifact Version 建立比對關係。
-
-掃描結果可用於：
-
-- 確認 Artifact Version 是否仍被 Workload 使用
-- 分析 Base Image Usage
-- 找出可能過期的 Image
-- 評估 Image Cleanup Candidate
-- 協助版本升級與影響範圍分析
-
-Cluster Connection 與 Credential 由外部設定注入，不寫入程式碼或專案文件。
-
----
-
-# Request Processing Flow｜請求處理流程
-
-一般 API Request 會依序經過 Authentication、Validation、Business Service 與 Persistence 或 External Integration。
-
-```text
-Client Request
-    │
-    ▼
-Authentication and Authorization
-    │
-    ▼
-Request Binding and Validation
-    │
-    ▼
-Business Service
-    ├─ Load Domain Data
-    ├─ Validate Current State
-    ├─ Execute Business Rule
-    └─ Coordinate External Resources
-    │
-    ▼
-Repository / Registry / Kubernetes / Storage
-    │
-    ▼
-Persist Result and Audit Information
-    │
-    ▼
-Response DTO
+    F->>S: API request with bearer token
+    S->>S: Validate signature and token claims
+    S->>S: Resolve user roles
+    alt Authorized
+        S->>C: Forward authenticated request
+        C->>A: Execute application use case
+        A-->>C: Return result
+        C-->>F: Authorized response
+    else Unauthenticated or forbidden
+        S-->>F: 401 or 403 response
+    end
 ```
 
-後端會先驗證 Request Format，再於 Service 層檢查資源是否存在、目前狀態是否允許操作，以及相關版本或依賴是否有效。
+主要設計包含：
 
-對外部系統的錯誤不直接洩漏底層例外，而會轉換成平台能理解的錯誤訊息與適當 HTTP Status。
+- OAuth 2.0 Resource Server
+- JWT Authentication
+- Role-based Authorization
+- Protected Management API
+- Unauthorized and Forbidden Response Handling
+- External Credential Configuration Injection
 
----
-
-# Deployment Package Generation｜部署包產生流程
-
-Deployment Package Generation 是平台最核心的後端流程之一。
-
-```text
-Project and Environment
-    │
-    ▼
-Resolve Selected Templates
-    │
-    ▼
-Resolve Template Versions
-    │
-    ▼
-Resolve Environment-specific Values
-    │
-    ▼
-Resolve Config and Managed Artifacts
-    │
-    ▼
-Validate Resource Compatibility
-    │
-    ▼
-Render Deployment Assets
-    │
-    ▼
-Assemble Deployment Package
-    │
-    ▼
-Persist Package Metadata and History
-    │
-    ▼
-Preview / Download / Deploy
-```
-
-## Resolution Phase
-
-後端依照 Project 與目前 Environment 解析：
-
-- Selected Template and Version
-- Environment-specific Values
-- ConfigMap and Secret Selection
-- Managed Application Artifact
-- Docker Base Image Version
-- Deployment Parameters
-
-所有內容都需要在產生部署包前完成狀態與相依性驗證。
-
-## Rendering Phase
-
-系統會依照不同 Template 類型建立對應的 Deployment Asset：
-
-- Helm Values and Rendered Manifest
-- Runtime-aware Dockerfile
-- Deployment Shell Workflow
-- Selected Config Resources
-- Managed Application Artifact
-
-Preview 與 Package Generation 共用相同的解析規則，避免預覽結果與實際產出使用不同邏輯。
-
-## Packaging Phase
-
-平台內部的 Storage Structure 與最終 Runtime Package Structure 分離。
-
-Packaging Layer 負責將分散在 Template、Project File、Artifact 與 Environment Configuration 中的資料重新組裝成標準部署包。
-
-Package Binary 與 Deployment Metadata 分開保存，使系統可以查詢歷史、重新下載，並追蹤每次產出所使用的版本與環境資訊。
+前端 Route Guard 用於改善導覽與操作體驗，但真正的 API 存取控制仍由後端執行。Registry、Kubernetes 與其他外部系統 Credential 由執行環境注入，不寫死於 Source Code，也不記錄在公開文件或操作 Log 中。
 
 ---
 
-# Artifact Push Task Workflow｜映像推送任務流程
+# Core Domain Modules｜核心領域模組
 
-Image Synchronization 或 Push 可能涉及 Manifest 解析、多平台映像處理與 Registry 傳輸，不適合綁定在單次同步 HTTP Request 中。
+## Project Group and Project Hierarchy｜Project Group 與 Project 階層
 
-後端將此類操作建模為 Task Workflow：
+Project Group 是 Project 的組織與操作邊界；Project 才是實際部署設定與 Package Generation 的單位。MULTI_MODULE Parent Project 則用於聚合多個 Child Module Project，與 Project Group 是不同概念。
 
-```text
-Create Task
-    │
-    ▼
-Validate Source Artifact
-    │
-    ▼
-Resolve Source and Target References
-    │
-    ▼
-Resolve Selected Platforms
-    │
-    ▼
-Execute Copy / Push
-    │
-    ▼
-Update Task Status
-    │
-    ├─ Success → Persist Result Log
-    └─ Failure → Persist Error and Retry Information
+```mermaid
+flowchart TD
+    A["Project Group"] --> B["Single-module Projects"]
+    A --> C["MULTI_MODULE Parent Project"]
+
+    C --> D["Child Module Project A"]
+    C --> E["Child Module Project B"]
+    C --> F["Child Module Project C"]
+
+    B --> G["Single-module Deployment Packages"]
+    C --> H["Aggregated Multi-module Deployment Package"]
+    D --> H
+    E --> H
+    F --> H
 ```
 
-Task Lifecycle 包含：
+主要規則包括：
 
-- PENDING
-- RUNNING
-- SUCCESS
-- FAILED
+- 每個 Project 只屬於一個 Project Group，同一 Group 內的 Project Name 必須唯一。
+- Project Group 仍包含 Project 時不能刪除，仍包含 Enabled Project 時不能停用。
+- Child Module 必須與 MULTI_MODULE Parent 位於同一個 Project Group，並使用一致的 Namespace。
+- Child Module 需要有效且唯一的 Relative Project Path；Parent 仍包含 Child 時不能刪除。
 
-設計重點包括：
+> **Important clarification｜重要區分**
+>
+> **Project Group** 是 Project 的組織容器；**MULTI_MODULE Parent Project** 才是多模組 Deployment Package 的聚合根節點。
 
-- 使用狀態機限制不同狀態可執行的操作
-- 執行前再次驗證 Source 與 Target
-- 保存開始時間、完成時間與錯誤資訊
-- 對可恢復錯誤提供 Retry Flow
-- 將即時 Task 與持久化 Push Log 分開管理
-- 系統啟動時處理不合理的未完成狀態，避免任務永久卡住
+---
 
-這讓前端可以顯示即時操作狀態，同時保留長期 Audit 與 Troubleshooting Information。
+## Project and Environment Configuration｜Project 與環境設定
+
+每個 Project 可以維護 DEV、UAT、PROD 三組獨立的 Selected Configuration，同時共用 Project 所擁有的 Template、Config Files 與其他可選資源。
+
+```mermaid
+flowchart TD
+    A["Project"] --> B["DEV Configuration"]
+    A --> C["UAT Configuration"]
+    A --> D["PROD Configuration"]
+
+    E["Shared Project Resources"] --> B
+    E --> C
+    E --> D
+
+    B --> F["Independent Selected Config"]
+    C --> G["Independent Selected Config"]
+    D --> H["Independent Selected Config"]
+
+    F --> I["Template / Values / CONFIG / Base Image"]
+    G --> J["Template / Values / CONFIG / Base Image"]
+    H --> K["Template / Values / CONFIG / Base Image"]
+```
+
+三個環境使用相同的設定模型，但各自保存獨立的 Template Source、Version、Values、Project Files、CONFIG Resources 與 Base Image Selection。修改單一環境時，不會覆蓋其他環境的設定。
+
+---
+
+## Template Management｜模板管理
+
+平台管理 Helm、Dockerfile 與 Shell Template，並將 Template Source 明確區分為 Public / Default 與 Project Custom。
+
+```mermaid
+flowchart TD
+    A["Selected Configuration"] --> B{"Template Source"}
+    B -->|Public / Default| C["Managed Public Template Version"]
+    B -->|Project Custom| D["Project-owned Custom Template Version"]
+    C --> E["Validation and Rendering"]
+    D --> E
+    E --> F["Preview"]
+    E --> G["Saved Rendered Output"]
+```
+
+Project Custom Template 具有 Project Scope 與 Local Version。Preview 只讀取並渲染內容，不修改已保存的部署輸出；Custom Template 仍被 Selected Configuration 使用時，也不能直接刪除。
+
+---
+
+## Artifact and Registry Management｜Artifact 與 Registry 管理
+
+Artifact 以 Version 為單位管理 Container Image、Base Image 與其他受控資源，並保存 Registry Reference、Digest、Platform 與使用狀態。
+
+Registry Module 封裝 Harbor 與 OCI-compatible Registry 的 Manifest Resolution、Tag Synchronization、Multi-platform Metadata 與 Artifact Push Flow，避免其他 Domain 直接依賴底層 Registry API。
+
+---
+
+## Kubernetes Image Management｜Kubernetes Image 管理
+
+後端會查詢 Kubernetes Workload 實際使用的 Container Image，並與平台管理的 Artifact Version 建立比對關係。
+
+```mermaid
+flowchart TD
+    A["Kubernetes Workloads"] --> B["Collect Image References"]
+    B --> C["Normalize Registry Metadata"]
+    C --> D["Match Managed Artifact Versions"]
+    D --> E["Build Workload Usage View"]
+```
+
+此功能用於了解叢集中的 Image Usage、版本差異與資源使用關係，不會觸發 Kubernetes Deployment 或修改 Cluster Resource。
+
+---
+
+# Deployment Package Generation｜部署套件產生
+
+Deployment Package Generation 是平台的核心輸出流程。單一 Project 產生自己的 Package；MULTI_MODULE Parent Project 則聚合 Child Module Project 的部署資產。
+
+```mermaid
+flowchart TD
+    A["Single-module Project"] --> C["Resolve Saved Selected Config"]
+    B["MULTI_MODULE Parent Project"] --> D["Resolve Child Module Projects"]
+    D --> C
+
+    C --> E["Load Saved Rendered Assets and Project Files"]
+    E --> F["Validate Version, Hierarchy and Package Inputs"]
+    F --> G["Assemble Deployment Package"]
+    G --> H["Persist Package Result and History"]
+    H --> I["Download Deployment Package"]
+```
+
+Project Group 不直接參與 Package Generation；對 Multi-module Project 而言，MULTI_MODULE Parent Project 才是 Aggregation Root。
+
+## Selected Config Preview and Save｜設定預覽與保存
+
+```mermaid
+flowchart LR
+    A["Selected Config Draft"] --> B["Resolve Template, Values, CONFIG and Base Image"]
+    B --> C["Validate Configuration"]
+    C --> D["Non-destructive Preview"]
+    C --> E["Save Selected Configuration"]
+    E --> F["Persist Rendered Output"]
+    F --> G["Available for Package Generation"]
+```
+
+Preview 與 Save 共用相同的 Resolution、Validation 與 Rendering Rule。Preview 不改寫正式輸出；只有 Save 成功後，才保存 Selected Configuration 與對應的 Rendered Asset。
+
+## Package Assembly｜套件組裝
+
+按下 **Deploy** 時，系統會讀取已保存的 Selected Config、Rendered Assets 與 Project Files，組裝成標準化 Deployment Package，並保存 Package Metadata 與執行歷史。
+
+平台內部 Storage Layout 與最終 Package Structure 分離，使內部儲存方式可以演進，同時維持穩定的輸出契約。
+
+> **Deploy does not execute Kubernetes deployment｜Deploy 不代表直接部署叢集**
+>
+> 此流程只產生可供 Kubernetes 部署使用的 Package，不會直接執行 `kubectl apply`、`helm install` 或其他 Cluster Write Operation。
+
+---
+
+# Artifact Push Task｜Artifact 推送任務
+
+Registry Synchronization 可能包含 Manifest Resolution、多平台映像處理與 Registry Transfer，不適合將完整流程綁定在單次同步 HTTP Request 中。
+
+```mermaid
+flowchart TD
+    A["Create Artifact Push Task"] --> B["Validate Managed Source Resource"]
+    B --> C["Resolve Source, Target and Platforms"]
+    C --> D["Set Task to Running"]
+    D --> E["Execute Registry Copy or Push"]
+    E --> F{"Execution Result"}
+    F -->|Success| G["Set Task to Success"]
+    F -->|Failure| H["Set Task to Failed"]
+    G --> I["Persist Result History"]
+    H --> J["Persist Failure Context"]
+    J --> K["Allow Valid Retry Flow"]
+```
+
+| Status | Backend Meaning |
+|---|---|
+| PENDING | Task 已建立，等待符合條件的執行操作。 |
+| RUNNING | Registry Operation 正在執行，限制重複觸發或不合理狀態變更。 |
+| SUCCESS | 外部操作完成，保存結果與必要的 Metadata Snapshot。 |
+| FAILED | 操作失敗，保存可理解的 Failure Context 並判斷是否允許 Retry。 |
+
+後端將目前可操作的 Task State 與長期保存的 Push History 分開管理。即使暫時性的 Task 後續被清理，成功或失敗的操作結果仍可用於 Audit、Troubleshooting 與使用者查詢。
 
 ---
 
 # Storage Architecture｜儲存架構
 
-平台採用 Metadata 與 Binary Content 分離的設計。
+平台採用 Metadata 與 Binary Content 分離的設計，Business Domain 不直接依賴實際 File System Path。
 
-```text
-Business Service
-    │
-    ├─ Metadata Repository → Database
-    │
-    └─ Storage Service → Binary Storage
+```mermaid
+flowchart TD
+    A["Business and Workflow Services"] --> B["Storage Coordination"]
+    B --> C["Queryable Metadata"]
+    B --> D["Binary Content"]
+    C --> E["MySQL"]
+    D --> F["Template, Project Resource and Package Content"]
 ```
 
-## Metadata
+Database 保存 Resource Ownership、Version Relationship、Storage Reference、Status 與 Deployment Relationship；Binary Content 則由 Storage Layer 統一處理 Upload、Preview、Download、Copy、Delete 與 Package Output。
 
-資料庫保存：
+Business Service 只透過 Storage Reference 取得內容，不自行拼接或依賴實際儲存路徑。這讓 Binary Lifecycle、Naming Rule 與 Storage Implementation 可以獨立演進，而不需要重寫主要 Deployment Workflow。
 
-- Resource Ownership
-- Version Relationship
-- Storage Reference
-- Content Type and Size
-- Status
-- Created and Updated Information
-- Deployment and Audit Relationship
-
-## Binary Content
-
-Storage Service 統一負責：
-
-- Upload
-- Download
-- Preview
-- Copy
-- Delete
-- Package Output
-- Path and Naming Validation
-
-Business Service 不直接依賴實際 File System Path，而是透過 Storage Reference 取得內容。
-
-這使儲存實作未來可以從 Local File Storage 替換為 Object Storage，而不需要重寫主要業務流程。
+公開文件不列出實際 Entity 欄位、Table Name、Foreign Key、Index、Folder Name 或 Storage Path Rule。
 
 ---
 
 # Validation and Error Handling｜驗證與錯誤處理
 
-## Validation Strategy
+後端將基本輸入驗證與需要 Domain Context 的商業驗證分開處理。
 
-驗證分為兩層：
+```mermaid
+flowchart TD
+    A["Incoming Operation"] --> B["Request Validation"]
+    B -->|Invalid| C["Return Validation Error"]
+    B -->|Valid| D["Business Validation"]
 
-- **Request Validation**：必要欄位、格式、Enum 與基本限制。
-- **Business Validation**：資源狀態、版本相依、使用關係、重複資料與外部系統條件。
+    D --> E["Resource State and Version Usage"]
+    D --> F["Project Group and Hierarchy Rules"]
+    D --> G["Environment and Template Source Boundary"]
+    D --> H["External System Preconditions"]
 
-例如刪除版本前，系統會確認該版本是否仍被 Project Configuration、Deployment 或 Kubernetes Workload 使用，而不是只檢查 Artifact 是否曾被任何地方使用。
+    E --> I{"Validation Result"}
+    F --> I
+    G --> I
+    H --> I
 
-## Error Handling
+    I -->|Valid| J["Execute Use Case"]
+    I -->|Invalid| K["Translate Domain Error"]
+```
 
-後端透過統一例外處理機制，將不同模組的錯誤轉換成一致的 API Error Response。
+## Validation Strategy｜驗證策略
 
-常見錯誤類型包括：
+- **Request Validation**：檢查必要輸入、格式、Enum 與基本限制。
+- **Business Validation**：檢查資源狀態、版本相依、使用關係、Project Hierarchy、環境邊界、Template Source 與外部系統條件。
+
+具體情境包括：
+
+- Project Group 在仍包含 Project 時不能刪除。
+- Project Group 在仍包含 Enabled Project 時不能停用。
+- Disabled Project Group 不能建立新的 Enabled Project。
+- MULTI_MODULE Parent Project 在仍包含 Child Module 時不能刪除。
+- Child Module 必須符合 Group、Namespace 與 Relative Path Rule。
+- Custom Template 仍被 Environment Configuration 選用時不能刪除。
+- Artifact 或 Template Version 仍被 Project Configuration、Deployment History 或 Workload 使用時不能移除。
+
+## Error Handling｜錯誤處理
+
+後端透過統一 Exception Handling 將不同模組的錯誤轉換成一致的 API Error Response。
+
+常見錯誤類型包含：
 
 - Resource Not Found
 - Duplicate Resource
 - Invalid State Transition
-- Version Still in Use
+- Invalid Project Hierarchy
+- Version or Template Still in Use
 - Invalid Template Package
 - External Registry Failure
 - Kubernetes Access Failure
 - Storage Operation Failure
 - Unauthorized or Forbidden Operation
 
-前端可以依照 HTTP Status 與 Error Message 顯示穩定且可理解的操作回饋。
+前端可以依照 HTTP Status 與 Error Message 顯示穩定且可理解的操作回饋；底層 Stack Trace、Internal Host、Credential 與外部 Client Detail 不直接暴露給使用者。
 
 ---
 
 # Transaction and Consistency｜交易與一致性
 
-修改型流程使用 Transaction 保持 Database State 一致，讀取型流程則在適合的情況下使用 Read-only Transaction。
+修改 Database State 的流程使用 Transaction 維持一致性；同時涉及 Registry Synchronization 或 Binary Storage 的長時間操作，則不將完整外部流程綁定在單一 Database Transaction 中。
 
-對同時涉及 Database 與外部系統的長時間操作，不將整段流程綁定在單一資料庫 Transaction 中，而是透過 Task Status 與 Audit Log 記錄執行進度。
+```mermaid
+flowchart TD
+    A["Business Operation"] --> B["Validate Current State"]
+    B --> C["Create Trackable Task or History"]
+    C --> D["Commit Required Database State"]
+    D --> E["Execute External Operation"]
+    E --> F{"External Result"}
+    F -->|Success| G["Update Final Status and Result"]
+    F -->|Failure| H["Persist Error Context"]
+    G --> I["Return Consistent Result"]
+    H --> J["Return Recoverable Failure State"]
+```
 
 主要原則包括：
 
-- 執行不可逆操作前先驗證目前狀態
-- 先建立可追蹤的 Task 或 History Record
-- 外部操作完成後再更新最終狀態
-- 失敗時保存 Error Context，而不是只回傳一次性錯誤
-- 刪除與更新時檢查 Version-level Usage
-- 避免單一 Template 更新覆蓋其他 Environment 或 Template 設定
+- 執行具有副作用的操作前先驗證目前狀態。
+- 先建立可追蹤的 Task 或 History Record。
+- Database Transaction 只涵蓋可由資料庫控制的狀態變更。
+- 外部操作完成後再更新最終狀態與結果。
+- 失敗時保存 Error Context，而不是只回傳一次性錯誤。
+- 刪除與更新前檢查 Version、Hierarchy 與 Template Usage。
+- 環境設定更新只影響目標 Environment。
+- Preview 不改寫正式 Environment Output。
+
+此設計不假設 Database Transaction 可以回滾 Registry 或 Binary Storage，而是透過狀態、歷史與明確的操作順序管理跨系統一致性。
 
 ---
 
-# Security and Authorization｜安全與權限
+# Backend Engineering Decisions｜後端工程設計決策
 
-後端 API 透過 Spring Security 與 JWT 驗證保護。
+- **Project Group and deployment hierarchy separation**  
+  Project Group 負責 Project 組織與操作邊界；MULTI_MODULE Parent Project 負責 Multi-module Package Aggregation，避免將兩種不同責任混為同一模型。
 
-主要設計包括：
+- **Version-based resource model**  
+  Artifact 與 Template 透過新版本保存變更，而不是直接覆蓋既有內容，使 Deployment 可以引用明確版本並保留 Traceability。
 
-- OAuth 2.0 Resource Server
-- JWT Authentication
-- Role-based Authorization
-- Protected Management API
-- Credential Configuration Injection
-- Unauthorized and Forbidden Response Handling
+- **Public and custom template source separation**  
+  Public Template 與 Project Custom Template 使用明確的 Template Source，確保 Preview、Save、Render 與 Delete 使用正確的內容生命週期。
 
-Registry、Kubernetes 或其他外部系統 Credential 由執行環境提供，不寫死在 Source Code 中，也不記錄於公開文件。
+- **Non-destructive custom template preview**  
+  Custom Template Preview 不改寫 Environment Output；只有正式保存設定時，才更新可部署的 Rendered Asset。
 
----
+- **Environment as an explicit domain boundary**  
+  DEV、UAT、PROD 使用獨立的 Selected Configuration，局部修改不會覆蓋其他環境的資源選擇。
 
-# Technology Stack｜使用技術
+- **Domain-oriented module design**  
+  後端依 Artifact、Template、Project、Deployment、Registry 與 Storage 等業務能力拆分，而不是只依 Controller、Service、Repository 技術層集中管理。
 
-## Backend
+- **Thin controller and service orchestration**  
+  Controller 處理 HTTP Boundary；Business Rule、Version Resolution 與跨模組流程由專責 Service 協調。
 
-- Java
-- Spring Boot
-- Spring MVC
-- Spring Data JPA
-- Spring Security
-- MySQL
+- **Runtime-specific template strategy**  
+  不同 Runtime 與 Package Type 保留各自的 Validation 與 Build Logic，避免單一 Generic Template 隱藏必要差異。
 
-## Platform Integration
+- **Shared preview and package rendering rules**  
+  Preview 與正式 Package Generation 共用 Resource Resolution、Validation 與 Rendering Rule，降低輸出不一致風險。
 
-- Docker
-- Kubernetes
-- Helm
-- Harbor Registry
-- OCI Registry
+- **Internal storage and package output separation**  
+  平台內部 Storage Layout 不等同 Runtime Package Structure，Packaging Layer 負責維持穩定輸出契約。
 
-## Data and Infrastructure
+- **Managed OCI references**  
+  Base Image 與 Deployment Artifact 由受管理的 Artifact Version 選擇，不使用未受控的自由文字 Image Reference。
 
-- File Storage
-- YAML
-- Shell Script
-- REST API
-- JWT
+- **Task and persistent history separation**  
+  Task 表示目前執行狀態與可用操作，History 保存長期 Audit、Result 與 Failure Context。
 
 ---
 
-# System Design Decisions｜系統設計決策
+# Engineering Challenges｜工程挑戰
 
-## Version-based Resource Model
-
-Artifact 與 Template 不直接覆蓋既有內容，而是建立新版本。
-
-這讓 Deployment 可以保存明確的版本關係，並支援 Traceability、Comparison、Rollback Planning 與 Audit History。
-
----
-
-## Environment Isolation
-
-DEV、UAT、PROD 使用獨立的 Selected Configuration。
-
-切換或修改單一環境時，不會覆蓋其他環境的 Template、Values 或 Project File Selection。
-
----
-
-## Runtime-specific Dockerfile Template
-
-不同 Runtime 與 Package Type 具有不同啟動方式、必要檔案與驗證規則，因此不強制合併成單一 Generic Dockerfile Template。
-
-平台保留共用 Upload Workflow 與 Metadata Model，同時讓不同 Runtime 使用自己的 Build Logic。
+| Challenge | Approach | Result |
+|---|---|---|
+| Project Group and Multi-module Concept Separation | 將組織容器與部署聚合根節點建模為不同概念。 | Project 分組不會錯誤介入 Multi-module Package Generation。 |
+| Multi-module Hierarchy Validation | 驗證 Parent Type、Group、Namespace、Relative Path 與 Child Usage。 | 避免跨 Group 掛載、路徑衝突與不完整的 Aggregated Package。 |
+| Project Custom Template Isolation | 明確追蹤 Public / Custom Template Source，並建立 Project-local Version 與 Delete Protection。 | 避免 Public Template、Custom Content 與 Environment Output 互相覆蓋或誤刪。 |
+| Cross-domain Deployment Orchestration | 使用專責 Deployment Workflow 依序完成 Resolution、Validation、Rendering、Packaging 與 Result Persistence。 | 集中跨模組規則，並讓 Preview 與 Package Generation 共用一致邏輯。 |
+| External System Consistency | 將 Registry Synchronization 與 Package Storage 等外部操作建模為可追蹤流程，保存中間狀態與 Failure Context。 | 不需要維持長時間 HTTP Connection 或將外部流程包在單一 Database Transaction 中。 |
+| Version Usage Validation | 將使用關係驗證到 Version Level，整合 Project Configuration、Deployment History 與 Workload Usage。 | 能精確阻擋仍在使用中的版本，同時避免限制未被使用的版本。 |
+| Multi-environment Configuration | 將 Environment 視為明確資料邊界，每次只解析及更新目標環境。 | 降低 DEV、UAT、PROD 設定互相覆蓋或交叉使用的風險。 |
+| Preview and Package Consistency | 共用 Resolution、Validation 與 Rendering Service，而不是分別實作兩套規則。 | 使用者預覽內容與正式產出採用相同 Domain Logic。 |
+| Registry Multi-platform Artifact | 解析 OCI Manifest 與 Platform Metadata，並將 Source、Target 與 Platform Selection 納入 Task Validation。 | 能以受管理且可追蹤的方式處理不同 Image Platform。 |
+| Storage and Business Data Coupling | Business Domain 只保存 Storage Reference，檔案生命週期由 Storage Layer 處理。 | Storage Implementation 與路徑規則可以獨立調整，不需重寫核心流程。 |
+| Stable Error Contract | 將 Validation、Domain 與 Infrastructure Exception 統一轉換為可理解的 API Error Response。 | 前端能建立一致的 Error Feedback，同時避免暴露內部實作資訊。 |
 
 ---
 
-## Deployment Package Separation
+# Backend Contributions｜後端主要貢獻
 
-平台內部 Storage Layout 與 Runtime Deployment Package 完全分離。
-
-內部結構可以隨平台需求演進，Packaging Layer 則維持穩定的輸出契約，降低部署腳本對內部儲存方式的依賴。
-
----
-
-## Managed OCI Reference
-
-Docker Base Image 與 Deployment Artifact 透過平台管理的 Artifact Version 選擇，不以自由文字保存未受控 Image Reference。
-
-這能確認實際使用的 Registry、Tag、Digest 與 Version，提升 Deployment Governance。
-
----
-
-## Task and Log Separation
-
-Task 表示目前可操作的執行狀態，Log 表示持久化的歷史結果。
-
-即使成功 Task 後續被清理，Push Log 與 Deployment History 仍能保留 Audit Information。
-
----
-
-# Engineering Challenges｜工程挑戰與解決方式
-
-## Cross-domain Deployment Orchestration
-
-**Challenge**
-
-Deployment Package 同時依賴 Project、Environment、Template Version、Artifact Version、Config Resource、Registry 與 Storage。
-
-**Solution**
-
-由 Deployment Service 統一協調不同領域，先完成 Resolution 與 Validation，再進行 Rendering、Packaging 與 History Persistence，避免 Controller 或單一 Repository 承擔跨領域邏輯。
+- 使用 Java 與 Spring Boot 建立 Artifact、Template、Project、Deployment、Registry 與 Storage 等後端功能。
+- 建立 Spring Security OAuth 2.0 Resource Server、JWT Authentication 與 Role-based Authorization。
+- 設計 Project Group 與 Project 的組織及操作限制。
+- 建立 MULTI_MODULE Parent Project、Child Module Project 與 Multi-module Package Generation Workflow。
+- 實作 Parent / Child 的 Group、Namespace、Relative Path 與 Delete Constraint Validation。
+- 建立 DEV、UAT、PROD 多環境 Project Configuration 與資源選擇流程。
+- 設計並實作 Public Template 與 Project Custom Template 的 Source Separation。
+- 建立 Project Custom Template Upload、Local Version、Preview、Selection 與 Delete Protection。
+- 設計並實作 Artifact 與 Template 的 Version-based Resource Management。
+- 實作 Deployment Resource Resolution、Business Validation、Asset Rendering 與 Package Generation。
+- 讓 Preview 與正式 Package Generation 共用相同的 Domain Rule。
+- 整合 Harbor、OCI-compatible Registry 與 Binary Storage，並建立 Kubernetes Workload Image Query。
+- 實作 OCI Manifest、Digest 與 Multi-platform Image Metadata 處理。
+- 建立受管理的 Docker Base Image 與 Artifact Version Selection。
+- 建立 Artifact Push Task、Status Transition、Retry Validation 與 Persistent Result History。
+- 實作 Kubernetes Workload Image Usage Scanning 與 Artifact Version Matching。
+- 建立 Version-level Usage Validation 與刪除保護。
+- 分離 Storage Metadata、Binary Content 與 Business Workflow。
+- 建立一致的 Validation、Exception Translation 與 API Error Response。
+- 整理可公開的後端架構、流程圖與工程決策文件。
 
 ---
 
-## External System Consistency
+# What I Learned｜開發經驗
 
-**Challenge**
+透過此專案，我對後端工程的理解從 REST API 與 Database CRUD，延伸到完整的 Platform Backend Design：
 
-Registry Push、Kubernetes Scan 與檔案操作不屬於資料庫內部 Transaction，可能出現部分成功或連線失敗。
+- 上層組織容器與部署階層可能看起來相似，但必須依責任分成不同 Domain Model。
+- Project Group 解決組織與操作限制；MULTI_MODULE Parent Project 解決多模組部署聚合，兩者不能混用。
+- Project Hierarchy Validation 必須同時考慮 Parent Type、Group Boundary、Namespace 與 Relative Path。
+- Public Template 與 Project Custom Template 需要明確的 Source 與 Lifecycle Boundary，才能避免 Preview、Save 與 Delete 操作互相干擾。
+- Non-destructive Preview 能讓使用者驗證內容，同時維持已保存 Environment Output 的穩定性。
+- Version Management 不只是保存歷史，也決定 Deployment 是否能被確認、追蹤與重現。
+- DEV、UAT、PROD 不只是 Enum 或前端 Tab，而是 Project Configuration 的實際 Domain Boundary。
+- Deployment Package Generation 的核心是 Project Hierarchy、Resource Resolution、Dependency Validation、Rendering 與 Packaging 的順序管理。
+- Database Transaction 無法涵蓋 Registry Synchronization 與 Binary Storage，跨系統一致性需要 Task State、History 與 Error Context。
+- Task 與 Persistent History 解決不同問題：前者呈現目前執行狀態，後者保存長期結果與診斷資訊。
+- Storage Abstraction 的重點是讓 Business Domain 不依賴實際路徑或 Binary Backend。
+- Validation 與 Error Handling 是部署流程的一部分，會直接影響系統能否安全地阻擋錯誤操作並提供可理解的回饋。
 
-**Solution**
+This backend demonstrates practical experience in Spring Boot application design, project hierarchy modeling, multi-module deployment orchestration, project-scoped template versioning, security, OCI integration, asynchronous task modeling, storage abstraction, and CI/CD platform engineering.
 
-將長時間操作建模為 Task，保存中間狀態、最終結果與錯誤原因；在不可逆操作前進行狀態驗證，並透過 Retry 與 Audit Log 提供恢復能力。
-
----
-
-## Version Usage Validation
-
-**Challenge**
-
-刪除 Artifact 或 Template Version 時，需要判斷實際被使用的是哪一個版本，而不是只判斷父層資源是否曾被關聯。
-
-**Solution**
-
-建立 Version-level Usage Tracking，並在 Project Configuration、Deployment 與 Workload Usage 等來源之間維持清楚的使用關係。
-
----
-
-## Storage and Business Data Separation
-
-**Challenge**
-
-若 Business Service 直接依賴 File System Path，將導致路徑規則、檔案生命週期與業務流程高度耦合。
-
-**Solution**
-
-透過 Storage Service 與 Storage Metadata 隔離實體檔案，Business Domain 僅保存 Storage Reference，並由 Storage Layer 統一處理檔案操作。
-
-
-我逐漸理解後端架構的重點不只是拆分 Controller、Service 與 Repository，而是讓商業規則、狀態轉換、外部整合與資料生命週期都有清楚的責任邊界。
-
-Deployment Package Generation、Artifact Push Workflow 與 Kubernetes Image Usage Tracking，也讓我累積了 Platform Engineering 與 CI/CD Domain 的實作經驗。
+本後端實作展示了 Spring Boot Application Design、Project Hierarchy Modeling、Multi-module Deployment Orchestration、Project-scoped Template Versioning、Security、OCI Integration、非同步任務模型、Storage Abstraction 與 CI/CD Platform Engineering 等實務經驗。
