@@ -132,26 +132,34 @@ flowchart LR
 
 # Grafana Dashboard Verification｜Grafana 儀表板驗證
 
-目前 Grafana 已提供 Kubernetes 與 Node Exporter 相關 Dashboard，包含：
+目前 Grafana 已整合 Kubernetes Monitoring Mixin 與 Node Exporter Mixin，
+提供不同 Kubernetes Resource Layer 的監控視角。
 
-- Kubernetes API Server
-- Cluster Compute Resources
-- Namespace Compute Resources
-- Node Compute Resources
-- Pod and Workload Resources
-- Kubernetes Networking
-- Persistent Volumes
-- Scheduler、Controller Manager、Kubelet 與 Proxy
-- Node Exporter Overview and USE Method
+| Observation Layer | Representative Dashboards | Validation Focus |
+|---|---|---|
+| Control Plane | API Server、Scheduler、Controller Manager | Availability、Request Rate、Error Rate、Latency 與 Work Queue 狀態。 |
+| Cluster | Cluster Compute Resources | Cluster 整體 CPU、Memory、Resource Request 與 Limit。 |
+| Node | Node Compute Resources、Node Exporter Overview | Node CPU、Memory、Disk、Network 與 Resource Saturation。 |
+| Namespace | Namespace Compute Resources | Namespace 層級的資源使用量與 Workload 分布。 |
+| Workload | Pod and Workload Resources | Deployment、StatefulSet、Pod、Container 與 Restart 狀態。 |
+| Networking | Kubernetes Networking | Network Traffic、Packet、Connection 與相關錯誤。 |
+| Storage | Persistent Volumes | Volume 使用量、容量與掛載狀態。 |
+| Runtime | Kubelet、Proxy | Pod、Container、Volume 與 Runtime Operation 狀態。 |
 
-這些 Dashboard 主要來自 Kubernetes Mixin 與 Node Exporter Mixin，可用於從 Cluster、Node、Namespace、Pod、Workload 與 Networking 等不同層級觀察系統狀態。
+Dashboard 驗證重點不是確認畫面是否能開啟，而是確認：
 
-<!--
-Replace the following placeholder with the GitHub attachment URL after uploading the screenshot.
+- Dashboard Query 能取得對應的 Prometheus Metrics。
+- Time Range 與 Refresh 設定變更後，資料能正確更新。
+- Cluster、Node、Namespace、Pod 與 Workload Filter 能切換至正確目標。
+- Resource Usage、Availability、Error Rate 與 Latency 等指標能正常呈現。
+- 異常指標能進一步定位至相關的 Namespace、Pod 或 Workload。
 
-<img width="1492" alt="Grafana Kubernetes dashboards" src="GITHUB_ATTACHMENT_URL" />
-*Grafana Dashboard List｜Kubernetes Mixin 與 Node Exporter Mixin 提供 Cluster、Node、Namespace、Pod 與 Networking 等監控視角。*
--->
+> **Screenshot Policy｜截圖政策**
+>
+> 本公開文件不提供實際監控環境截圖與 Dashboard URL，
+> 避免暴露 Cluster Address、Node Address、Namespace、Service Name、
+> Workload 數量與其他基礎設施資訊。
+> Dashboard Coverage 與驗證方式以抽象化說明及流程圖呈現。
 
 ---
 
@@ -341,9 +349,6 @@ Metrics、Logs 與 Traces 並不是三個互相獨立的畫面，而是問題分
 - 測試 Application Log 是否能被 Loki 收集與查詢。
 - 測試 Distributed Trace 是否能在 Tempo 與 Grafana 中查詢。
 - 協助驗證 Kubernetes 與非 Kubernetes Application 的監控來源。
-- 整理監控測試流程、結果與教育訓練所需操作資訊。
-
-> 上述內容應依最終實際完成的測試範圍保留或調整；尚未完成驗證的項目不應在公開文件中描述為已完成成果。
 
 ---
 
