@@ -4,7 +4,7 @@
 
 後端使用 **Java、Spring Boot 與 MySQL** 建立，負責 Kubernetes 部署專案的設定管理、Template 與 Config 管理、部署資產渲染，以及 Deployment Package 打包。
 
-除了 REST API 與資料持久化，後端也涵蓋 Authentication、Role-based Authorization、Project Hierarchy、Version-based Resource Management、Custom Template、Deployment Asset Rendering、Artifact Push Task 與 Kubernetes Workload Image Usage Scan。
+除了 REST API 與資料持久化，後端也涵蓋 Keycloak Authentication、Member Management、Role-based Authorization、Project Access Control、Project Hierarchy、Version-based Resource Management、Custom Template、Deployment Asset Rendering、Artifact Push Task 與 Kubernetes Workload Image Usage Scan。
 
 > **Public Documentation Notice｜公開文件說明**
 >
@@ -26,7 +26,9 @@
 
 | Domain | Backend Responsibilities |
 |---|---|
-| Authentication and Authorization | 驗證 JWT、解析使用者角色並保護管理 API。 |
+| Authentication and Authorization | 由 Keycloak 提供登入與 Token，後端驗證 JWT、解析角色並保護管理 API。 |
+| Member Management | 同步 Keycloak 使用者、管理平台會員與角色，並維護 Project Member 存取關係。 |
+| Project Access Control | 結合 Platform Role 與 Project Member，限制使用者可執行的操作及可存取的 Project。 |
 | Project Group | 管理 Project 的上層組織與操作邊界，並提供部分預設行為。 |
 | Project Hierarchy | 管理單一部署 Project、MULTI_MODULE Parent Project 與 Child Module Project 的關係。 |
 | Project Configuration | 管理 DEV、UAT、PROD 環境設定、資源選擇與 Project Files。 |
@@ -39,7 +41,7 @@
 | Storage | 分離可查詢 Metadata 與 Binary Content，支援 Template、Project Resource 與 Package Lifecycle。 |
 | Operation History | 保存 Deployment 與外部操作的執行狀態、結果與錯誤資訊。 |
 
-後端的核心工作不只是提供 CRUD API，而是將 Project、Template、Values、Config Files 與受管理的 Artifact Version 組合成可預覽、可保存及可打包的部署設定。
+後端的核心工作不只是提供 CRUD API，而是先依 Platform Role 與 Project Member 驗證操作權限及 Project 存取範圍，再將 Project、Template、Values、Config Files 與受管理的 Artifact Version 組合成可預覽、可保存及可打包的部署設定。
 
 ---
 
@@ -48,7 +50,7 @@
 | Category | Technology | Usage |
 |---|---|---|
 | Language and Application Framework | Java, Spring Boot | 建立 REST API、Domain Logic、Validation、Persistence、Transaction 與外部系統整合。 |
-| Security | Spring Security, OAuth 2.0 Resource Server, JWT | 驗證使用者身分並執行 Role-based Authorization。 |
+| Security and Identity | Spring Security, OAuth 2.0 Resource Server, JWT, Keycloak | 驗證 Keycloak 發出的 Token、解析 Platform Role，並執行 Role-based Authorization 與 Project Access Control。 |
 | Database | MySQL | 保存 Resource Metadata、Version Relationship、Project Configuration、Task State 與 Deployment History。 |
 | Registry Integration | Harbor, OCI-compatible Registry | 解析 OCI Artifact、Manifest、Digest、Platform，並執行 Registry Synchronization。 |
 | Container Platform | Kubernetes | 產生 Kubernetes 部署所需資產，並查詢 Workload Image Usage。 |
@@ -65,6 +67,7 @@ Helm、Dockerfile、YAML 與 Shell Script 在本平台中屬於 Deployment Asset
 
 ```text
 backend/src/main/java/
+├── member/         # Platform member, role and project access management
 ├── artifact/       # Managed resources and version lifecycle
 ├── template/       # Public/custom template validation and rendering
 ├── project/        # Project group, hierarchy and environment configuration
@@ -72,7 +75,7 @@ backend/src/main/java/
 ├── registry/       # OCI integration and artifact push workflow
 ├── kubernetes/     # Workload image discovery and usage analysis
 ├── storage/        # Metadata and binary content coordination
-├── security/       # JWT authentication and authorization
+├── security/       # Keycloak JWT authentication and request authorization
 ├── common/         # Shared exception, response and utility logic
 └── configuration/  # Application and infrastructure configuration
 ```
@@ -85,9 +88,13 @@ backend/src/main/java/
 
 ```mermaid
 flowchart TD
-    A["React Management Frontend"] --> B["Spring Security and JWT Authorization"]
-    B --> C["Backend Domain APIs"]
+    A["React Management Frontend"] --> K["Keycloak Authentication"]
+    K --> A
+    A --> B["Spring Security and JWT Authorization"]
+    B --> R["Member, Role and Project Access Resolution"]
+    R --> C["Backend Domain APIs"]
 
+    C --> S["Member and Project Member Management"]
     C --> D["Project Group Management"]
     D --> E["Project and Project Hierarchy"]
     E --> F["Project CONFIG Files"]
@@ -101,7 +108,7 @@ flowchart TD
     G --> J
     H --> J
     I --> J
-    K["Values and Environment Parameters"] --> J
+    V["Values and Environment Parameters"] --> J
 
     J --> L["Preview and Render Deployment Assets"]
     L --> M["Save Selected Config and Rendered Output"]
@@ -112,7 +119,7 @@ flowchart TD
     P <--> Q["Kubernetes Cluster"]
 ```
 
-平台的主要流程是先建立 Project Group 與 Project，再上傳 Project CONFIG Files。使用者可選擇系統管理的 Public / Default Template，或上傳 Project Custom Template，並在 Selected Configuration 中組合 Template、Values、Config Files、Base Image 與其他環境設定。
+使用者先透過 Keycloak 完成登入，後端再根據 Platform Role 與 Project Member 關係決定可執行的功能及可存取的 Project。具備權限後，平台的主要流程是建立 Project Group 與 Project，再上傳 Project CONFIG Files。使用者可選擇系統管理的 Public / Default Template，或上傳 Project Custom Template，並在 Selected Configuration 中組合 Template、Values、Config Files、Base Image 與其他環境設定。
 
 Selected Configuration 提供 Preview / Render，用於檢查 Helm、Dockerfile 與 Shell 等部署資產。正式保存後，系統會保留目前選定的設定與 Rendered Output；後續執行 **Deploy** 時，會依已保存的 Selected Config 與 Project Files 產生完整 Deployment Package，並提供歷史查詢與下載。
 
@@ -124,42 +131,101 @@ Selected Configuration 提供 Preview / Render，用於檢查 Helm、Dockerfile 
 
 # Authentication and Authorization｜登入與權限
 
-後端作為 OAuth 2.0 Resource Server，驗證前端送出的 JWT，並使用 Role-based Authorization 保護管理功能。
+系統登入由 Keycloak 提供。前端透過 OpenID Connect 完成登入並取得 Token；後端本身不實作帳號密碼登入流程，而是作為 OAuth 2.0 Resource Server，驗證前端送出的 JWT，解析 Keycloak Role，並執行後端授權檢查。
+
+平台將權限拆成兩個層次：
+
+```text
+Keycloak Role
+→ 決定使用者可以執行哪些類型的操作
+
+Project Member
+→ 決定使用者可以存取哪些 Project
+```
+
+這兩層權限必須同時成立。使用者即使具有某個 Platform Role，仍只能操作 Project Member 關係允許存取的 Project；前端隱藏按鈕只用於改善操作體驗，真正的權限邊界由後端 API 執行。
 
 ```mermaid
 sequenceDiagram
+    participant U as User
+    participant K as Keycloak
     participant F as React Frontend
     participant S as Spring Security
+    participant M as Member Access Service
     participant C as Backend Domain API
-    participant A as Application Service
 
+    U->>K: Sign in
+    K-->>F: Access token
     F->>S: API request with bearer token
     S->>S: Validate signature and token claims
-    S->>S: Resolve user roles
+    S->>S: Resolve Keycloak role
+    S->>M: Resolve platform member and project access
+    M->>M: Check role permission and Project Member mapping
     alt Authorized
+        M-->>S: Access granted
         S->>C: Forward authenticated request
-        C->>A: Execute application use case
-        A-->>C: Return result
         C-->>F: Authorized response
     else Unauthenticated or forbidden
         S-->>F: 401 or 403 response
     end
 ```
 
+## Role Boundary｜角色邊界
+
+| Role | Backend Authorization Boundary |
+|---|---|
+| SUPER_USER | 平台最高權限，可管理會員、角色與 Project Member，可存取全部 Project、Project Group 與 Deployment Log，並可刪除 Project。 |
+| PROJECT_ADMIN | 只能管理已被指派的既有 Project；不可建立 Project、建立 Project Group、刪除 Project，亦不可管理會員與角色。只能查看包含可存取 Project 的 Project Group。 |
+| DEVELOPER | 以查看、下載與執行部署為主，只能存取已被指派的 Project；不可修改 Project Configuration、Project Files 或 Template。 |
+
 主要設計包含：
 
+- Keycloak Authentication
+- OpenID Connect and OAuth 2.0
 - OAuth 2.0 Resource Server
 - JWT Authentication
+- Keycloak Role Resolution
+- Platform Member Synchronization
 - Role-based Authorization
+- Project Member Access Control
 - Protected Management API
 - Unauthorized and Forbidden Response Handling
 - External Credential Configuration Injection
 
-前端 Route Guard 用於改善導覽與操作體驗，但真正的 API 存取控制仍由後端執行。Registry、Kubernetes 與其他外部系統 Credential 由執行環境注入，不寫死於 Source Code，也不記錄在公開文件或操作 Log 中。
+Member Management 負責同步 Keycloak 使用者資訊並維護平台會員資料。Platform Role 控制功能類型，Project Member 控制資源範圍，使相同角色的使用者仍可擁有不同的 Project 存取集合。
+
+Registry、Kubernetes 與其他外部系統 Credential 由執行環境注入，不寫死於 Source Code，也不記錄在公開文件或操作 Log 中。
 
 ---
 
 # Core Domain Modules｜核心領域模組
+
+## Member Management and Project Access Control｜會員與 Project 存取控制
+
+Member Domain 將 Keycloak 的身分與角色資訊轉換成平台可管理的會員資料，並透過 Project Member 關係限制各會員可存取的 Project。
+
+```mermaid
+flowchart LR
+    A["Keycloak User"] --> B["Platform Member"]
+    B --> C["Platform Role"]
+    B --> D["Project Member Mapping"]
+    C --> E["Allowed Operation Types"]
+    D --> F["Accessible Projects"]
+    E --> G["Authorized Project Operation"]
+    F --> G
+```
+
+主要責任包括：
+
+- 從 Keycloak 讀取並同步使用者資料。
+- 管理平台會員及其 Platform Role。
+- 維護會員與 Project 之間的 Project Member 關係。
+- 在 Project、Project Group 與 Deployment Log 查詢時套用資源範圍限制。
+- 在修改、下載、部署與刪除操作前，同時驗證 Role Boundary 與 Project Access。
+
+只有 `SUPER_USER` 可以管理會員、角色與 Project Member。`PROJECT_ADMIN` 與 `DEVELOPER` 不會因角色本身而取得全部 Project，而是只能存取明確被指派的 Project。
+
+---
 
 ## Project Group and Project Hierarchy｜Project Group 與 Project 階層
 
@@ -370,11 +436,13 @@ flowchart TD
     B -->|Valid| D["Business Validation"]
 
     D --> E["Resource State and Version Usage"]
+    D --> L["Role and Project Access Boundary"]
     D --> F["Project Group and Hierarchy Rules"]
     D --> G["Environment and Template Source Boundary"]
     D --> H["External System Preconditions"]
 
     E --> I{"Validation Result"}
+    L --> I
     F --> I
     G --> I
     H --> I
@@ -386,10 +454,13 @@ flowchart TD
 ## Validation Strategy｜驗證策略
 
 - **Request Validation**：檢查必要輸入、格式、Enum 與基本限制。
-- **Business Validation**：檢查資源狀態、版本相依、使用關係、Project Hierarchy、環境邊界、Template Source 與外部系統條件。
+- **Business Validation**：檢查 Role Boundary、Project Member 存取範圍、資源狀態、版本相依、使用關係、Project Hierarchy、環境邊界、Template Source 與外部系統條件。
 
 具體情境包括：
 
+- 只有 SUPER_USER 可以管理會員、角色與 Project Member。
+- PROJECT_ADMIN 與 DEVELOPER 只能查詢及操作已被指派的 Project。
+- Project Group 查詢必須依可存取 Project 過濾，避免暴露無權限的 Group。
 - Project Group 在仍包含 Project 時不能刪除。
 - Project Group 在仍包含 Enabled Project 時不能停用。
 - Disabled Project Group 不能建立新的 Enabled Project。
@@ -413,6 +484,7 @@ flowchart TD
 - External Registry Failure
 - Kubernetes Access Failure
 - Storage Operation Failure
+- Member or Project Access Not Found
 - Unauthorized or Forbidden Operation
 
 前端可以依照 HTTP Status 與 Error Message 顯示穩定且可理解的操作回饋；底層 Stack Trace、Internal Host、Credential 與外部 Client Detail 不直接暴露給使用者。
@@ -452,6 +524,12 @@ flowchart TD
 ---
 
 # Backend Engineering Decisions｜後端工程設計決策
+
+- **Authentication responsibility delegated to Keycloak**  
+  Keycloak 負責登入、使用者身分與 Token 發行；後端專注於 JWT Validation、Member Synchronization、Authorization 與 Business Resource Access，不重複實作帳號密碼登入邏輯。
+
+- **Platform role and project access separation**  
+  Platform Role 決定使用者可執行的操作類型，Project Member 決定可存取的 Project。兩者分離後，相同角色的使用者可以擁有不同資源範圍，也避免將功能權限與資源歸屬耦合。
 
 - **Project Group and deployment hierarchy separation**  
   Project Group 負責 Project 組織與操作邊界；MULTI_MODULE Parent Project 負責 Multi-module Package Aggregation，避免將兩種不同責任混為同一模型。
@@ -495,6 +573,8 @@ flowchart TD
 
 | Challenge | Approach | Result |
 |---|---|---|
+| Authentication and Platform Member Boundary | 將登入與 Token 發行交由 Keycloak，平台只同步必要會員資料並處理授權。 | 避免重複實作登入流程，同時保留平台自己的會員及資源權限模型。 |
+| Platform Role and Project Access Separation | 以 Platform Role 控制功能權限，並以 Project Member 控制可存取資源。 | 相同角色可被配置不同 Project 範圍，且後端能一致套用資源層級授權。 |
 | Project Group and Multi-module Concept Separation | 將組織容器與部署聚合根節點建模為不同概念。 | Project 分組不會錯誤介入 Multi-module Package Generation。 |
 | Multi-module Hierarchy Validation | 驗證 Parent Type、Group、Namespace、Relative Path 與 Child Usage。 | 避免跨 Group 掛載、路徑衝突與不完整的 Aggregated Package。 |
 | Project Custom Template Isolation | 明確追蹤 Public / Custom Template Source，並建立 Project-local Version 與 Delete Protection。 | 避免 Public Template、Custom Content 與 Environment Output 互相覆蓋或誤刪。 |
@@ -512,7 +592,10 @@ flowchart TD
 # Backend Contributions｜後端主要貢獻
 
 - 使用 Java 與 Spring Boot 建立 Artifact、Template、Project、Deployment、Registry 與 Storage 等後端功能。
-- 建立 Spring Security OAuth 2.0 Resource Server、JWT Authentication 與 Role-based Authorization。
+- 整合 Keycloak、OpenID Connect 與 Spring Security OAuth 2.0 Resource Server，建立 JWT Authentication 與 Role-based Authorization。
+- 建立 Member Domain，同步 Keycloak 使用者並維護平台會員資料。
+- 實作 Platform Role、Project Member 與 Project Access Control。
+- 將功能權限與 Project 資源存取分離，並在後端查詢及操作 API 套用一致的授權邊界。
 - 設計 Project Group 與 Project 的組織及操作限制。
 - 建立 MULTI_MODULE Parent Project、Child Module Project 與 Multi-module Package Generation Workflow。
 - 實作 Parent / Child 的 Group、Namespace、Relative Path 與 Delete Constraint Validation。
@@ -538,6 +621,8 @@ flowchart TD
 
 透過此專案，我對後端工程的理解從 REST API 與 Database CRUD，延伸到完整的 Platform Backend Design：
 
+- Authentication、Platform Authorization 與 Resource Access 是不同責任：Keycloak 負責登入與 Token，Platform Role 控制操作類型，Project Member 控制資源範圍。
+- 前端 Route Guard 只能改善操作體驗，真正的會員、角色與 Project 存取限制必須由後端 API 統一執行。
 - 上層組織容器與部署階層可能看起來相似，但必須依責任分成不同 Domain Model。
 - Project Group 解決組織與操作限制；MULTI_MODULE Parent Project 解決多模組部署聚合，兩者不能混用。
 - Project Hierarchy Validation 必須同時考慮 Parent Type、Group Boundary、Namespace 與 Relative Path。
@@ -551,6 +636,6 @@ flowchart TD
 - Storage Abstraction 的重點是讓 Business Domain 不依賴實際路徑或 Binary Backend。
 - Validation 與 Error Handling 是部署流程的一部分，會直接影響系統能否安全地阻擋錯誤操作並提供可理解的回饋。
 
-This backend demonstrates practical experience in Spring Boot application design, project hierarchy modeling, multi-module deployment orchestration, project-scoped template versioning, security, OCI integration, asynchronous task modeling, storage abstraction, and CI/CD platform engineering.
+This backend demonstrates practical experience in Spring Boot application design, Keycloak integration, member and project access modeling, project hierarchy modeling, multi-module deployment orchestration, project-scoped template versioning, security, OCI integration, asynchronous task modeling, storage abstraction, and CI/CD platform engineering.
 
-本後端實作展示了 Spring Boot Application Design、Project Hierarchy Modeling、Multi-module Deployment Orchestration、Project-scoped Template Versioning、Security、OCI Integration、非同步任務模型、Storage Abstraction 與 CI/CD Platform Engineering 等實務經驗。
+本後端實作展示了 Spring Boot Application Design、Keycloak Integration、Member 與 Project Access Modeling、Project Hierarchy Modeling、Multi-module Deployment Orchestration、Project-scoped Template Versioning、Security、OCI Integration、非同步任務模型、Storage Abstraction 與 CI/CD Platform Engineering 等實務經驗。
