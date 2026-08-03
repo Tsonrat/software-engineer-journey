@@ -59,13 +59,13 @@ flowchart LR
 
 | Area | Description |
 |---|---|
-| Member Management | Synchronize Keycloak users, manage platform members, roles and project access permissions. |
-| Artifact and Registry | Manage OCI artifacts, image versions, registry synchronization and metadata. |
-| Template | Manage public templates, project custom templates and template versions. |
-| Project | Manage project groups, project hierarchy and multi-environment configurations. |
-| Deployment | Preview deployment assets and generate versioned deployment packages. |
-| Task and History | Track package generation, registry tasks, execution history and retry status. |
-| Image Management | Discover Kubernetes workload images and compare managed artifact versions. |
+| **Member Management｜會員管理** | Synchronize Keycloak users, manage platform members, roles and project access permissions.（同步 Keycloak 使用者，管理平台會員、角色與 Project 存取權限。） |
+| **Artifact and Registry｜Artifact 與 Registry 管理** | Manage OCI artifacts, image versions, registry synchronization and metadata.（管理 OCI Artifact、Image 版本、Registry 同步與 Metadata。） |
+| **Template｜Template 管理** | Manage public templates, project custom templates and template versions.（管理 Public Template、Project Custom Template 與 Template Version。） |
+| **Project｜Project 管理** | Manage project groups, project hierarchy and multi-environment configurations.（管理 Project Group、Project Hierarchy 與多環境設定。） |
+| **Deployment｜Deployment** | Preview deployment assets and generate versioned deployment packages.（預覽 Deployment Assets，並產生版本化的 Deployment Package。） |
+| **Task and History｜Task 與 History** | Track package generation, registry tasks, execution history and retry status.（追蹤 Package Generation、Registry Task、執行歷史與 Retry 狀態。） |
+| **Image Management｜Image 管理** | Discover Kubernetes workload images and compare managed artifact versions.（掃描 Kubernetes Workload Image，並比對平台管理的 Artifact Version。） |
 
 ---
 
