@@ -12,6 +12,6 @@
 
 Kubernetes CI/CD 管理平台，整合部署流程、專案設定、Artifact 與 Kubernetes 相關管理功能。
 
-➡️ [View Project](./k8s-cicd/)
+➡️ [View Project](./k8s_cicd_Platform/)
 
 
