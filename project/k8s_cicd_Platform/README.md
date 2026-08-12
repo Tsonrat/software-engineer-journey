@@ -1,8 +1,8 @@
 # K8s Deploy Tool｜Kubernetes CI/CD Platform
 
-A full-stack Kubernetes CI/CD platform for managing deployment resources, project access, environment configuration, and deployment package generation.
+A full-stack Kubernetes CI/CD platform for managing deployment resources, project access, environment configuration, artifact integrity, and deployment package generation.
 
-一套全端 Kubernetes CI/CD 平台，整合 **Artifact、Template、Project Configuration、Member Management、Registry Workflow** 與 **Deployment Package Generation**，提供一致且可追蹤的部署資源、權限與環境管理流程。
+一套全端 Kubernetes CI/CD 平台，整合 **Artifact、Template、Project Configuration、Member Management、Registry Workflow、Artifact Integrity Verification** 與 **Deployment Package Generation**，提供一致且可追蹤的部署資源、權限與環境管理流程。
 
 > **Repository Notice｜Repository 說明**
 >
@@ -13,9 +13,9 @@ A full-stack Kubernetes CI/CD platform for managing deployment resources, projec
 # Documentation｜詳細文件
 
 | Document | Content |
-|---|---|
+| --- | --- |
 | [Frontend Development｜前端開發](./Frontend.md) | React 管理介面、Authentication、Routing、多環境設定、Deployment Preview、非同步任務與共用元件。 |
-| [Backend Development｜後端開發](./Backend.md) | Spring Boot Domain Design、Member Management、Project Access Control、Project Hierarchy、Artifact / Template Version、Registry、Storage 與 Deployment Package Generation。 |
+| [Backend Development｜後端開發](./Backend.md) | Spring Boot Domain Design、Member Management、Project Access Control、Project Hierarchy、Artifact / Template Version、Registry、Artifact Integrity Verification、Storage 與 Deployment Package Generation。 |
 | [Application Monitoring & Observability｜應用監控與可觀測性](./Observability.md) | Grafana、Prometheus、Loki、Tempo，以及 Metrics、Logs、Traces 的測試與驗證經驗。 |
 
 ---
@@ -28,6 +28,7 @@ A full-stack Kubernetes CI/CD platform for managing deployment resources, projec
 - Role-based Authorization
 - Project Access Control
 - Registry and OCI Artifact
+- Artifact SHA-256 Integrity Verification
 - Helm、Dockerfile and Shell Template
 - Project Group and Project Hierarchy
 - DEV、UAT、PROD Environment Configuration
@@ -36,7 +37,11 @@ A full-stack Kubernetes CI/CD platform for managing deployment resources, projec
 - Deployment Package Generation and History
 - Kubernetes Workload Image Usage
 
-使用者可以建立 Project，選擇受管理的 Artifact 與 Template Version，並依不同環境設定 Values、Project Files 與 Base Image。平台會完成驗證、部署資產渲染與 Package Generation，產生可下載、可追蹤的 Deployment Package。
+使用者可以建立 Project，選擇受管理的 Artifact 與 Template Version，並依不同環境設定 Values、Project Files 與 Base Image。
+
+平台會完成設定驗證、部署資產渲染與 Package Generation；對需要來源完整性驗證的 Artifact，也可以保存 SHA-256 checksum 資訊，並在相關 Artifact Workflow 中進行校驗與留下驗證紀錄。
+
+最終產生可下載、可追蹤的 Deployment Package。
 
 ---
 
@@ -44,11 +49,12 @@ A full-stack Kubernetes CI/CD platform for managing deployment resources, projec
 
 ```mermaid
 flowchart LR
-    A["Artifact and Template"] --> B["Project Configuration"]
-    B --> C["DEV / UAT / PROD"]
-    C --> D["Preview and Validation"]
-    D --> E["Deployment Package"]
-    E --> F["External Docker / Helm / Kubernetes Workflow"]
+    A["Artifact and Template"] --> B["Artifact Integrity Verification"]
+    B --> C["Project Configuration"]
+    C --> D["DEV / UAT / PROD"]
+    D --> E["Preview and Validation"]
+    E --> F["Deployment Package"]
+    F --> G["External Docker / Helm / Kubernetes Workflow"]
 ```
 
 > 在本平台中，**Deploy** 代表產生 Deployment Package。後端目前不會直接執行 `kubectl apply` 或 `helm install`；實際部署由產出的 Package 在平台外執行。
@@ -58,13 +64,13 @@ flowchart LR
 # Core Features｜核心功能
 
 | Area | Description |
-|---|---|
+| --- | --- |
 | **Member Management｜會員管理** | Synchronize Keycloak users, manage platform members, roles and project access permissions.（同步 Keycloak 使用者，管理平台會員、角色與 Project 存取權限。） |
-| **Artifact and Registry｜Artifact 與 Registry 管理** | Manage OCI artifacts, image versions, registry synchronization and metadata.（管理 OCI Artifact、Image 版本、Registry 同步與 Metadata。） |
+| **Artifact and Registry｜Artifact 與 Registry 管理** | Manage OCI artifacts, image versions, registry synchronization, metadata and SHA-256 integrity verification.（管理 OCI Artifact、Image 版本、Registry 同步、Metadata 與 SHA-256 完整性驗證。） |
 | **Template｜Template 管理** | Manage public templates, project custom templates and template versions.（管理 Public Template、Project Custom Template 與 Template Version。） |
 | **Project｜Project 管理** | Manage project groups, project hierarchy and multi-environment configurations.（管理 Project Group、Project Hierarchy 與多環境設定。） |
 | **Deployment｜Deployment** | Preview deployment assets and generate versioned deployment packages.（預覽 Deployment Assets，並產生版本化的 Deployment Package。） |
-| **Task and History｜Task 與 History** | Track package generation, registry tasks, execution history and retry status.（追蹤 Package Generation、Registry Task、執行歷史與 Retry 狀態。） |
+| **Task and History｜Task 與 History** | Track package generation, registry tasks, checksum verification, execution history and retry status.（追蹤 Package Generation、Registry Task、Checksum Verification、執行歷史與 Retry 狀態。） |
 | **Image Management｜Image 管理** | Discover Kubernetes workload images and compare managed artifact versions.（掃描 Kubernetes Workload Image，並比對平台管理的 Artifact Version。） |
 
 ---
@@ -72,10 +78,11 @@ flowchart LR
 # Technology Stack｜技術棧
 
 | Area | Technologies |
-|---|---|
+| --- | --- |
 | Frontend | React、TypeScript、Vite、React Router、Axios |
 | Backend | Java、Spring Boot、Spring Security、Spring Data JPA |
 | Data and Storage | MySQL、Binary File Storage |
 | Identity | Keycloak、OAuth 2.0、OpenID Connect、JWT |
 | Registry and Deployment | Harbor、OCI、Docker、Helm、Kubernetes |
+| Integrity Verification | SHA-256 Checksum |
 | Observability | Grafana、Prometheus、Loki、Tempo、Odigos |
