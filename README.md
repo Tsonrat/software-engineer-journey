@@ -12,5 +12,6 @@ Welcome to my learning journey.
 ```text
 LeetCode/       LeetCode 題解和筆記
 Project/        目前實作專案紀錄
+computer-science-fundamentals/        Pointer/資料結構/演算法筆記
 ```
 
