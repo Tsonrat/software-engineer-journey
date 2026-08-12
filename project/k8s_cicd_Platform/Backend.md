@@ -33,8 +33,9 @@
 | Project Hierarchy | 管理單一部署 Project、MULTI_MODULE Parent Project 與 Child Module Project 的關係。 |
 | Project Configuration | 管理 DEV、UAT、PROD 環境設定、資源選擇與 Project Files。 |
 | Template | 管理 Public Template、Project Custom Template、版本、驗證與 Rendering Strategy。 |
-| Artifact | 管理可部署資源、版本、狀態、Registry Reference 與使用關係。 |
+| Artifact | 管理可部署資源、版本、狀態、Registry Reference、SHA-256 Checksum 與使用關係。 |
 | Registry | 封裝 OCI Manifest、Tag、Digest、Platform Metadata 與 Registry Synchronization。 |
+| Artifact Integrity Verification | 管理 Artifact 來源 SHA-256 Checksum、下載驗證、Image Digest 比對與 Verification History。 |
 | Deployment | 解析 Project Hierarchy 與環境設定，渲染部署資產並產生 Deployment Package。 |
 | Artifact Push Task | 建立及執行 Registry Synchronization Task，保存狀態、錯誤與持久化結果。 |
 | Image Management | 掃描 Kubernetes Workload Image，並與平台管理版本建立使用關係。 |
@@ -308,9 +309,34 @@ Project Custom Template 具有 Project Scope 與 Local Version。Preview 只讀�
 
 ## Artifact and Registry Management｜Artifact 與 Registry 管理
 
-Artifact 以 Version 為單位管理 Container Image、Base Image 與其他受控資源，並保存 Registry Reference、Digest、Platform 與使用狀態。
+Artifact 以 Version 為單位管理 Container Image、Base Image 與其他受控資源，並保存 Registry Reference、Digest、Platform、Checksum Metadata 與使用狀態。
 
 Registry Module 封裝 Harbor 與 OCI-compatible Registry 的 Manifest Resolution、Tag Synchronization、Multi-platform Metadata 與 Artifact Push Flow，避免其他 Domain 直接依賴底層 Registry API。
+
+### Artifact Integrity Verification｜Artifact 完整性驗證
+
+平台新增 SHA-256 Checksum 驗證能力，用於確認外部下載來源或 Registry Source Image 是否符合 Artifact 保存的預期校驗值。
+
+Artifact 可以保存 Checksum URL、Checksum File Name 與 Expected SHA-256 Checksum。Checksum Verification Service 負責下載來源檔案、計算 SHA-256、解析外部 Checksum Content，並保存驗證結果。若未直接提供 Expected Checksum，但提供 Checksum URL，系統可以從對應內容解析 SHA-256，並將解析結果保存回 Artifact。
+
+```mermaid
+flowchart TD
+    A["Artifact Source"] --> B{"Checksum Source"}
+    B -->|Expected Checksum| C["Normalize Expected SHA-256"]
+    B -->|Checksum URL| D["Resolve SHA-256 from Checksum Content"]
+    D --> C
+    C --> E["Calculate or Resolve Actual Digest"]
+    E --> F{"Checksum Matched?"}
+    F -->|Yes| G["Persist Verification Success"]
+    F -->|No| H["Persist Failure Context"]
+    H --> I["Block Protected Operation"]
+```
+
+下載驗證會計算實際檔案的 SHA-256 並與 Expected Checksum 比對；Artifact Image Push 則會在 Registry Transfer 前，比對 Resolved Source Image 的 Index Digest 或 Platform Manifest Digest。
+
+驗證結果會保存 Artifact、來源參考、Expected Checksum、Actual Checksum、Match Result、Failure Reason 與 Verification Time，讓後續操作可以查詢完整的 Integrity Verification History。
+
+Checksum 不符合時，受保護的 Artifact Push Flow 會在 Registry Push 前停止，避免來源完整性不符合預期的 Artifact 被同步至目標 Registry。
 
 ---
 
@@ -383,14 +409,15 @@ Registry Synchronization 可能包含 Manifest Resolution、多平台映像處�
 flowchart TD
     A["Create Artifact Push Task"] --> B["Validate Managed Source Resource"]
     B --> C["Resolve Source, Target and Platforms"]
-    C --> D["Set Task to Running"]
-    D --> E["Execute Registry Copy or Push"]
-    E --> F{"Execution Result"}
-    F -->|Success| G["Set Task to Success"]
-    F -->|Failure| H["Set Task to Failed"]
-    G --> I["Persist Result History"]
-    H --> J["Persist Failure Context"]
-    J --> K["Allow Valid Retry Flow"]
+    C --> D["Verify Source SHA-256 / Image Digest"]
+    D --> E["Set Task to Running"]
+    E --> F["Execute Registry Copy or Push"]
+    F --> G{"Execution Result"}
+    G -->|Success| H["Set Task to Success"]
+    G -->|Failure| I["Set Task to Failed"]
+    H --> J["Persist Result History"]
+    I --> K["Persist Failure Context"]
+    K --> L["Allow Valid Retry Flow"]
 ```
 
 | Status | Backend Meaning |
@@ -564,6 +591,9 @@ flowchart TD
 - **Managed OCI references**  
   Base Image 與 Deployment Artifact 由受管理的 Artifact Version 選擇，不使用未受控的自由文字 Image Reference。
 
+- **Artifact integrity verification before registry push**  
+  Artifact 可保存 SHA-256 Checksum Metadata；Registry Push 前會先驗證 Resolved Source Image Digest，Checksum 不符合時阻擋後續同步，並保存 Verification Result 與 Failure Context。
+
 - **Task and persistent history separation**  
   Task 表示目前執行狀態與可用操作，History 保存長期 Audit、Result 與 Failure Context。
 
@@ -584,6 +614,7 @@ flowchart TD
 | Multi-environment Configuration | 將 Environment 視為明確資料邊界，每次只解析及更新目標環境。 | 降低 DEV、UAT、PROD 設定互相覆蓋或交叉使用的風險。 |
 | Preview and Package Consistency | 共用 Resolution、Validation 與 Rendering Service，而不是分別實作兩套規則。 | 使用者預覽內容與正式產出採用相同 Domain Logic。 |
 | Registry Multi-platform Artifact | 解析 OCI Manifest 與 Platform Metadata，並將 Source、Target 與 Platform Selection 納入 Task Validation。 | 能以受管理且可追蹤的方式處理不同 Image Platform。 |
+| Artifact Source Integrity | 以 SHA-256 Checksum 驗證下載來源，並在 Image Push 前比對 Source Image Index Digest 或 Platform Manifest Digest。 | Checksum 不符合時可在 Registry Transfer 前阻擋操作，並保留可查詢的 Verification History。 |
 | Storage and Business Data Coupling | Business Domain 只保存 Storage Reference，檔案生命週期由 Storage Layer 處理。 | Storage Implementation 與路徑規則可以獨立調整，不需重寫核心流程。 |
 | Stable Error Contract | 將 Validation、Domain 與 Infrastructure Exception 統一轉換為可理解的 API Error Response。 | 前端能建立一致的 Error Feedback，同時避免暴露內部實作資訊。 |
 
@@ -608,6 +639,8 @@ flowchart TD
 - 整合 Harbor、OCI-compatible Registry 與 Binary Storage，並建立 Kubernetes Workload Image Query。
 - 實作 OCI Manifest、Digest 與 Multi-platform Image Metadata 處理。
 - 建立受管理的 Docker Base Image 與 Artifact Version Selection。
+- 建立 Artifact SHA-256 Checksum Metadata、下載驗證與 Verification History。
+- 在 Artifact Push 前驗證 Source Image Index Digest 或 Platform Manifest Digest，Checksum 不符合時阻擋 Registry Push。
 - 建立 Artifact Push Task、Status Transition、Retry Validation 與 Persistent Result History。
 - 實作 Kubernetes Workload Image Usage Scanning 與 Artifact Version Matching。
 - 建立 Version-level Usage Validation 與刪除保護。
@@ -629,6 +662,7 @@ flowchart TD
 - Public Template 與 Project Custom Template 需要明確的 Source 與 Lifecycle Boundary，才能避免 Preview、Save 與 Delete 操作互相干擾。
 - Non-destructive Preview 能讓使用者驗證內容，同時維持已保存 Environment Output 的穩定性。
 - Version Management 不只是保存歷史，也決定 Deployment 是否能被確認、追蹤與重現。
+- Artifact Integrity Verification 需要在真正產生外部副作用前完成；Checksum / Digest 不符合時應阻擋 Registry Push，並留下 Expected、Actual 與 Failure Context 供後續追蹤。
 - DEV、UAT、PROD 不只是 Enum 或前端 Tab，而是 Project Configuration 的實際 Domain Boundary。
 - Deployment Package Generation 的核心是 Project Hierarchy、Resource Resolution、Dependency Validation、Rendering 與 Packaging 的順序管理。
 - Database Transaction 無法涵蓋 Registry Synchronization 與 Binary Storage，跨系統一致性需要 Task State、History 與 Error Context。
