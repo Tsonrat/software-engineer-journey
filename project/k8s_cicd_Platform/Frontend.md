@@ -28,7 +28,7 @@
 |---|---|
 | Authentication | 登入導向、Callback、Token Lifecycle、使用者狀態與 Route Protection。 |
 | Registry | Registry 查詢、建立、編輯、啟用狀態與內部 Registry 選擇。 |
-| Artifact | Artifact Explorer、Tag Detail、Version、Digest 與 Platform Information。 |
+| Artifact | Artifact Explorer、Tag Detail、Version、Digest、Platform Information 與 Checksum Metadata Contract。 |
 | Artifact Push Task | Task 建立、執行、Retry、狀態顯示、Detail 與 Persistent Log。 |
 | Template | Helm、Dockerfile、Shell Template 與 Version 的管理、上傳、下載及預覽。 |
 | Project | Project Group、Project、Project File、Custom Template 與環境設定。 |
@@ -279,6 +279,18 @@ Registry Management 提供 Registry 的建立、編輯、查詢與啟用狀態�
 <img width="591" height="701" alt="OCI artifact platform resolution and selection" src="https://github.com/user-attachments/assets/158438d6-7dff-4492-8a0e-33a00a389978" />
 
 *Artifact Platform Resolution｜建立 Artifact 時，平台會解析選定 Image Tag 的 OCI Manifest，列出可用的 Architecture、Variant 與 Digest，並允許使用者選擇需要納入管理的 Platform。*
+
+### Artifact Checksum Contract｜Artifact Checksum 型別契約
+
+Artifact API Contract 已加入 SHA-256 Checksum 相關欄位，使前端 Domain Model 能與後端 Artifact Integrity Verification 能力保持一致。
+
+目前 `Artifact`、`ArtifactCreateRequest` 與 `ArtifactEditRequest` 已包含：
+
+- `checksumUrl`
+- `checksumFileName`
+- `expectedChecksum`
+
+這批前端變更目前集中在 **TypeScript Type / API Contract**。Checksum Verification API、Verification History 與專用操作介面屬於後端已新增能力；在尚未完成對應 UI 前，本文件不將 Checksum Verification 描述為已完成的前端互動功能。
 
 ---
 
@@ -577,7 +589,7 @@ event.stopPropagation();
   API Function 依 Registry、Artifact、Template、Project 與 Deployment 拆分，使 Endpoint 與 Type 能跟隨 Domain 演進。
 
 - **Explicit TypeScript contracts**  
-  Request、Response、Enum 與 Nullable Field 透過明確型別描述，降低前後端 DTO 不一致造成的 Runtime Error。
+  Request、Response、Enum 與 Nullable Field 透過明確型別描述，降低前後端 DTO 不一致造成的 Runtime Error。Artifact Contract 也同步加入 Checksum URL、Checksum File Name 與 Expected Checksum，使前端型別能跟隨後端 Integrity Verification Domain 演進。
 
 - **Environment as an explicit domain boundary**  
   DEV、UAT、PROD 不是單純畫面 Tab，而是 Project Configuration 的資料邊界；File Availability 的 `ALL` 與實際 Deployment Environment 分開處理。
@@ -599,6 +611,7 @@ event.stopPropagation();
 |---|---|
 | OIDC Callback 與 Token Lifecycle | 使用 PKCE、State Validation、Token Refresh、Axios Interceptor 與 Route Guard 建立完整流程。 |
 | 不同 API Response Format | 分別處理 JSON、Paginated JSON、Text Preview 與 Blob Download。 |
+| Backend Artifact Contract Evolution | Artifact Type 與 Create / Edit Request 同步加入 Checksum Metadata，先維持 API Contract 一致，再依實際 UI 進度擴充 Verification Interaction。 |
 | DEV / UAT / PROD 設定隔離 | 依目前環境載入及保存資料，避免切換或局部修改時覆蓋其他環境。 |
 | Template 相依選項 | 上游選擇改變時清除失效的 Version、Values、Base Image 或 Preview State。 |
 | Public / Custom Template | 依 Template Source 載入不同 Version，同時維持一致的設定介面。 |
@@ -616,6 +629,7 @@ event.stopPropagation();
 - 建立 React、TypeScript 與 Vite 的管理介面及頁面導覽架構。
 - 實作 OAuth 2.0 / OpenID Connect with PKCE、Token Lifecycle 與 Role-based Route Protection。
 - 建立依 Domain 拆分的 Axios API Layer，處理 JSON、Pagination、Text Preview 與 Blob Download。
+- 同步 Artifact Type、Create Request 與 Edit Request 的 Checksum Metadata Contract，銜接後端 SHA-256 Integrity Verification 能力。
 - 實作 Registry、Artifact Explorer、Template、Project、Deployment、Push Task 與 Image Management 等頁面。
 - 實作 DEV、UAT、PROD 多環境 Project Selected Configuration Workflow。
 - 實作 Template Version、Base Image、Project File、Values 與 Preview 的相依選擇流程。
@@ -631,7 +645,7 @@ event.stopPropagation();
 透過此專案，我對前端工程的理解從單一頁面與 API 串接，延伸到完整的管理平台設計：
 
 - Authentication 不只是登入按鈕，而是 Callback、Token Refresh、Unauthorized Handling 與 Route Protection 的完整生命週期。
-- TypeScript 不只是基本型別檢查，也能用來表達 Environment、Template、Task Status 與 API Contract 等 Domain Rule。
+- TypeScript 不只是基本型別檢查，也能用來表達 Environment、Template、Task Status、Checksum Metadata 與 API Contract 等 Domain Rule。
 - 複雜表單的核心是管理資料依賴與失效條件，而不是單純增加更多 State。
 - Preview、Loading、Error 與 Retry 是部署管理流程的一部分，會直接影響使用者是否能判斷操作結果。
 - 非同步 Task 與 Persistent History 解決的是不同問題，前端需要分別呈現即時狀態與長期紀錄。
